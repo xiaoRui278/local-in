@@ -12,7 +12,6 @@ import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
-import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.controllers.LocalInController;
 import wang.xiaorui.local.p2p.P2PServer;
 import wang.xiaorui.local.server.LocalInP2PServer;

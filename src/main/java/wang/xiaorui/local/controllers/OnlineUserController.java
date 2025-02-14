@@ -70,9 +70,8 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         List<HBox> allUserHbox = new ArrayList<>();
         if (!allPeers.isEmpty()) {
             for (LocalInUser user : allPeers) {
-                List<String> hostAddress = user.getHostAddress();
                 //正则获取IP地址
-                allUserHbox.add(buildUserItem(hostAddress.get(0)));
+                allUserHbox.add(buildUserItem(user));
             }
             Platform.runLater(()-> {
                 userListVBoxNode.getChildren().setAll(allUserHbox);
@@ -83,10 +82,12 @@ public class OnlineUserController implements Initializable, ConnectionListener {
     /**
      * 构建用户列表项
      *
-     * @param clientIp 用户IP地址
+     * @param user 用户IP地址
      * @return HBox
      */
-    private HBox buildUserItem(String clientIp) {
+    private HBox buildUserItem(LocalInUser user) {
+        List<String> hostAddress = user.getHostAddress();
+        String clientIp = hostAddress.get(0);
         HBox userItem = new HBox();
         userItem.getStyleClass().add("user-item-hbox");
         userItem.setPadding(new Insets(0, 20, 0, 20));
@@ -113,6 +114,9 @@ public class OnlineUserController implements Initializable, ConnectionListener {
 
         MFXFontIcon chatIcon = new MFXFontIcon("fas-comment-dots", 30);
         chatIcon.getStyleClass().add("user-icon");
+        chatIcon.setOnMouseClicked(event -> {
+            System.out.println("---->点击了["+user.getName()+"]");
+        });
 
         userItem.getChildren().addAll(icon, userInfoVBox, chatIcon);
         HBox.setHgrow(userInfoVBox, Priority.ALWAYS);
