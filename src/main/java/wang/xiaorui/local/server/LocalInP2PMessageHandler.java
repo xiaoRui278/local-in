@@ -18,12 +18,12 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
     private final ConnectionCache connectionCache;
     private List<LocalInMessageObserver> messageObservers = new ArrayList<>();
 
-    public LocalInP2PMessageHandler(Stream stream){
+    public LocalInP2PMessageHandler(Stream stream) {
         super(stream);
         this.connectionCache = ConnectionCache.getInstance();
     }
 
-    public void addMessageObserver(LocalInMessageObserver messageObservers){
+    public void addMessageObserver(LocalInMessageObserver messageObservers) {
         this.messageObservers.add(messageObservers);
     }
 
@@ -48,15 +48,18 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
         System.out.println("---LocalInP2PMessageHandler>>>onMessage[" + stream.remotePeerId().toBase58() + "]----->");
         String message = msg.toString(StandardCharsets.UTF_8);
         System.out.println("---LocalInP2PMessageHandler>>>onMessage---[" + message + "]-->");
-        if(null == message || message.isEmpty()){
+        if (null == message || message.isEmpty()) {
             return;
         }
-        if(message.startsWith("/group")){
+        if (message.startsWith("/group")) {
             //群发消息
+            //去掉群发消息前缀
+            message = message.substring("/group".length());
             //渲染消息
-            messageObservers.forEach(m -> {
-                m.onMessage(message);
-            });
+            for (LocalInMessageObserver messageObserver : messageObservers) {
+                messageObserver.onMessage(message);
+            }
+            return;
         }
     }
 
