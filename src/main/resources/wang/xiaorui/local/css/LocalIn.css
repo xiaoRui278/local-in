@@ -1,0 +1,110 @@
+@import '../fonts/Fonts.css';
+@import 'MFXColors.css';
+/**************************************************
+ * Root
+**************************************************/
+.main-pane{
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-border-color: #ebebeb;
+    -fx-border-radius: 10;
+}
+/**************************************************
+ * Window Header
+**************************************************/
+.main-pane .windows-header{
+    -fx-background-color: -mfx-black;
+    -fx-background-radius: 10 10 0 10;
+    -fx-border-radius: 10 10 0 10;
+}
+.main-pane .close-icon {
+    -mfx-color: -mfx-danger;
+    -fx-opacity: 0.5;
+}
+
+.main-pane .close-icon:hover {
+    -fx-opacity: 1.0;
+}
+
+.main-pane .minimize-icon {
+    -mfx-color: -mfx-warning;
+    -fx-opacity: 0.5;
+}
+
+.main-pane .minimize-icon:hover {
+    -fx-opacity: 1.0;
+}
+.main-pane .always-on-top-icon {
+    -mfx-color: -mfx-success;
+    -fx-opacity: 0.5;
+}
+
+.main-pane .always-on-top-icon:hover {
+    -fx-opacity: 1.0;
+}
+
+.main-pane .always-on-top-icon:always-on-top {
+    -fx-opacity: 1.0;
+}
+/**************************************************
+ * Sidebar
+**************************************************/
+.main-pane .sidebar {
+    -fx-background-color: -mfx-blue-main;
+    -fx-background-insets: -1 -5 -1 -1;
+    -fx-background-radius: 10 20 20 10;
+}
+.main-pane .sidebar .header {
+    -fx-font-family: 'Open Sans ExtraBold';
+    -fx-font-size: 30;
+    -fx-text-fill: white;
+    -fx-pref-width: 250;
+    -fx-alignment: center;
+}
+
+.main-pane .sidebar .mfx-scroll-pane {
+    -fx-background-color: transparent;
+
+    -track-color: rgba(255, 255, 255, 0.3);
+    -thumb-color: white;
+    -thumb-hover-color: white;
+}
+
+.main-pane .sidebar .navbar .mfx-rectangle-toggle-node {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-border-color: transparent;
+    -fx-border-radius: 0;
+    -fx-pref-height: 40;
+
+    -fx-font-family: 'Open Sans SemiBold';
+    -fx-font-size: 13;
+    -fx-text-fill: white;
+}
+
+.main-pane .sidebar .navbar .mfx-rectangle-toggle-node .mfx-ripple-generator {
+    -mfx-paused: true;
+}
+
+.main-pane .sidebar .navbar .mfx-rectangle-toggle-node .mfx-icon-wrapper .mfx-font-icon {
+    -mfx-color: white;
+}
+
+.main-pane .sidebar .navbar .mfx-rectangle-toggle-node:selected {
+    -fx-background-color: white;
+    -fx-background-radius: 5;
+    -fx-text-fill: -mfx-blue-main;
+}
+
+.rootPane .sidebar .navbar .mfx-rectangle-toggle-node:selected .selection-rectangle {
+    -fx-stroke: transparent;
+    -fx-fill: -mfx-blue-main;
+}
+
+.main-pane .sidebar .navbar .mfx-rectangle-toggle-node:selected .mfx-icon-wrapper .mfx-font-icon {
+    -mfx-color: -mfx-blue-main;
+}
+
+.main-pane .content-pane{
+
+}

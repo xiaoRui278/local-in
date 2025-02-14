@@ -1,0 +1,187 @@
+package wang.xiaorui.local.controllers;
+
+import io.github.palexdev.materialfx.controls.MFXButton;
+import io.github.palexdev.materialfx.controls.MFXIconWrapper;
+import io.github.palexdev.materialfx.controls.MFXRectangleToggleNode;
+import io.github.palexdev.materialfx.controls.MFXScrollPane;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
+import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
+import io.github.palexdev.materialfx.enums.ScrimPriority;
+import io.github.palexdev.materialfx.utils.ToggleButtonsUtil;
+import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
+import io.libp2p.core.PeerId;
+import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.fxml.FXML;
+import javafx.fxml.Initializable;
+import javafx.geometry.Pos;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import wang.xiaorui.local.server.ConnectionCache;
+import wang.xiaorui.local.server.ConnectionListener;
+import wang.xiaorui.local.server.LocalInMessageObserver;
+import wang.xiaorui.local.server.LocalInUser;
+
+import java.net.URL;
+import java.util.*;
+
+/**
+ * @author wangxiaorui
+ * @date 2025/2/10
+ * @desc
+ */
+public class OnlineChatController implements Initializable, ConnectionListener, LocalInMessageObserver {
+    @FXML
+    public MFXScrollPane chatUserScrollPane;
+    @FXML
+    public TextArea chatTextArea;
+    @FXML
+    public TextArea chatInput;
+
+    private final ToggleGroup toggleGroup;
+    @FXML
+    public VBox chatUserListBox;
+    @FXML
+    public AnchorPane onlineChatPane;
+
+    private LocalInUser currentSelectUser;
+    private Stage stage;
+
+    private MFXStageDialog dialog;
+    private MFXGenericDialog dialogContent;
+
+    private OnlineChatController() {
+        this.toggleGroup = new ToggleGroup();
+        ToggleButtonsUtil.addAlwaysOneSelectedSupport(toggleGroup);
+    }
+
+    private static volatile OnlineChatController instance;
+
+    public static OnlineChatController getInstance() {
+        if (instance == null) {
+            synchronized (OnlineChatController.class) {
+                if (instance == null) {
+                    instance = new OnlineChatController();
+                }
+            }
+        }
+        return instance;
+    }
+
+    public void setStage(Stage stage) {
+        this.stage = stage;
+    }
+
+    public void sendMessage(ActionEvent actionEvent) {
+        if (currentSelectUser == null) {
+            this.openError("无法找到用户", "消息无法发送，发送消息前需要点击左侧用户列表，选中制定用户之后进行发送");
+            return;
+        }
+        currentSelectUser.getController().send(chatInput.getText());
+        chatInput.clear();
+        System.out.println("发送一条消息");
+    }
+
+    @Override
+    public void initialize(URL url, ResourceBundle resourceBundle) {
+        Platform.runLater(() -> {
+            this.dialogContent = MFXGenericDialogBuilder.build()
+                    .makeScrollable(true)
+                    .get();
+            this.dialog = MFXGenericDialogBuilder.build(dialogContent)
+                    .setShowClose(false)
+                    .setShowAlwaysOnTop(false)
+                    .setShowMinimize(false)
+                    .toStageDialogBuilder()
+                    .initOwner(stage)
+                    .initModality(Modality.APPLICATION_MODAL)
+                    .setDraggable(false)
+                    .setTitle("提示信息")
+                    .setOwnerNode(onlineChatPane)
+                    .setScrimPriority(ScrimPriority.WINDOW)
+                    .setScrimOwner(true)
+                    .get();
+            dialogContent.addActions(
+                    Map.entry(new MFXButton("我已了解"), event -> dialog.close())
+            );
+            dialogContent.setPrefHeight(80);
+            dialogContent.setMaxSize(300, 100);
+        });
+        //initUserList();
+    }
+
+    public void initUserList(ConnectionCache connectionCache) {
+        Platform.runLater(() -> {
+            chatUserListBox.getChildren().clear();
+        });
+        Collection<LocalInUser> allPeers = connectionCache.getAllPeers();
+        List<ToggleButton> toggleButtons = new ArrayList<>();
+        if (!allPeers.isEmpty()) {
+            for (LocalInUser user : allPeers) {
+                toggleButtons.add(createToggleAction(user));
+            }
+            Platform.runLater(() -> {
+                chatUserListBox.getChildren().setAll(toggleButtons);
+            });
+        }
+    }
+
+    private ToggleButton createToggleAction(LocalInUser user) {
+        List<String> hostAddress = user.getHostAddress();
+        String clientIp = hostAddress.get(0);
+        String clientName = "匿名用户" + clientIp.substring(clientIp.lastIndexOf("."));
+        ToggleButton toggle = createToggle(clientName);
+        toggle.setOnAction(actionEvent -> {
+            currentSelectUser = user;
+        });
+        return toggle;
+    }
+
+    private ToggleButton createToggle(String text) {
+        MFXIconWrapper wrapper = new MFXIconWrapper("fas-circle-user", 24, 32);
+        MFXRectangleToggleNode toggleNode = new MFXRectangleToggleNode(text, wrapper);
+        toggleNode.setAlignment(Pos.CENTER_LEFT);
+        toggleNode.setMaxWidth(136);
+        toggleNode.setToggleGroup(toggleGroup);
+        return toggleNode;
+    }
+
+
+    private void openError(String title, String message) {
+        MFXFontIcon errorIcon = new MFXFontIcon("fas-circle-xmark", 18);
+        dialogContent.setHeaderIcon(errorIcon);
+        dialogContent.setHeaderText(title);
+        dialogContent.setContentText(message);
+        convertDialogTo("mfx-error-dialog");
+        dialog.showDialog();
+    }
+
+    private void convertDialogTo(String styleClass) {
+        dialogContent.getStyleClass().removeIf(
+                s -> s.equals("mfx-info-dialog") || s.equals("mfx-warn-dialog") || s.equals("mfx-error-dialog")
+        );
+
+        if (styleClass != null)
+            dialogContent.getStyleClass().add(styleClass);
+    }
+
+    @Override
+    public void onAdd(PeerId peerId, ConnectionCache connectionCache) {
+        initUserList(connectionCache);
+    }
+
+    @Override
+    public void onRemove(PeerId peerId, ConnectionCache connectionCache) {
+        initUserList(connectionCache);
+    }
+
+    @Override
+    public void onMessage(String message) {
+    }
+}

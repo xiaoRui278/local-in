@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import io.github.palexdev.materialfx.controls.MFXButton?>
+<?import io.github.palexdev.materialfx.controls.MFXScrollPane?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.*?>
+<?import io.github.palexdev.mfxresources.fonts.MFXFontIcon?>
+<?import javafx.scene.text.Text?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Label?>
+<AnchorPane xmlns="http://javafx.com/javafx/17"
+            styleClass="online-chat-pane" stylesheets="@../css/OnlineChat.css"
+            fx:controller="wang.xiaorui.local.controllers.OnlineChatController"
+            fx:id="onlineChatPane"
+            xmlns:fx="http://javafx.com/fxml">
+    <!--联系人列表-->
+    <MFXScrollPane styleClass="chat-user-box" fx:id="chatUserScrollPane" hbarPolicy="NEVER"
+                   AnchorPane.topAnchor="0" AnchorPane.leftAnchor="1" AnchorPane.bottomAnchor="2">
+        <VBox spacing="5" fx:id="chatUserListBox" prefWidth="140">
+            <padding>
+                <Insets right="5"/>
+            </padding>
+        </VBox>
+    </MFXScrollPane>
+    <VBox AnchorPane.leftAnchor="146" AnchorPane.bottomAnchor="10" AnchorPane.topAnchor="0" AnchorPane.rightAnchor="2"
+          spacing="10">
+        <!--        <TextArea fx:id="chatTextArea" editable="false" wrapText="true"-->
+        <!--                  styleClass="chat-text-area" VBox.vgrow="ALWAYS">-->
+        <!--        </TextArea>-->
+        <MFXScrollPane styleClass="chat-message-list" fx:id="messageListPane" hbarPolicy="NEVER"
+                       fitToWidth="true" VBox.vgrow="ALWAYS">
+            <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="5.0">
+                <HBox styleClass="message-item">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                </HBox>
+                <HBox styleClass="message-item" alignment="TOP_RIGHT">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content,me"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10" right="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                </HBox>
+                <HBox styleClass="message-item" alignment="TOP_RIGHT">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content,me"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10" right="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                </HBox>
+                <HBox styleClass="message-item">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                </HBox>
+                <HBox styleClass="message-item" alignment="TOP_RIGHT">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content,me"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10" right="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                </HBox>
+                <HBox styleClass="message-item">
+                    <padding>
+                        <Insets left="5" right="5" bottom="5" top="5"/>
+                    </padding>
+                    <!--头像-->
+                    <MFXFontIcon description="fas-circle-user" size="24.0" styleClass="message-sender"/>
+                    <!--消息正文-->
+                    <Label styleClass="message-item-content"
+                           text="这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文这个地方是消息正文,这个地方是消息正文,这个地方是消息正文,这个地方是消息正文">
+                        <HBox.margin>
+                            <Insets top="8" left="10"/>
+                        </HBox.margin>
+                        <padding>
+                            <Insets left="10" right="10" bottom="5" top="5"/>
+                        </padding>
+                    </Label>
+                </HBox>
+            </VBox>
+        </MFXScrollPane>
+        <HBox alignment="BOTTOM_LEFT" spacing="10" prefHeight="80" minHeight="80">
+            <TextArea fx:id="chatInput" styleClass="chat-input" prefHeight="80"/>
+            <MFXButton onAction="#sendMessage" id="custom" styleClass="sendBtn" minHeight="27.0" minWidth="70.0"
+                       text="发送"/>
+        </HBox>
+    </VBox>
+</AnchorPane>

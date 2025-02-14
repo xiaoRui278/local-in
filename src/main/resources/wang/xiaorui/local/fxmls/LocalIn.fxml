@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import io.github.palexdev.materialfx.controls.MFXScrollPane?>
+<?import io.github.palexdev.mfxresources.fonts.MFXFontIcon?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.*?>
+<AnchorPane fx:id="rootPane" xmlns="http://javafx.com/javafx/17" prefWidth="1000" prefHeight="600"
+            fx:controller="wang.xiaorui.local.controllers.LocalInController"
+            xmlns:fx="http://javafx.com/fxml" styleClass="main-pane" stylesheets="@../css/LocalIn.css">
+    <!--窗口操作栏-->
+    <HBox fx:id="windowHeader" alignment="CENTER_RIGHT" layoutY="6.0" prefHeight="30.0" prefWidth="800.0"
+          spacing="10.0" styleClass="windows-header"
+          AnchorPane.leftAnchor="-1" AnchorPane.rightAnchor="-1" AnchorPane.topAnchor="-1">
+        <padding>
+            <Insets right="10.0"/>
+        </padding>
+        <MFXFontIcon fx:id="alwaysOnTopIcon" description="fas-circle" size="15.0" styleClass="always-on-top-icon"/>
+        <MFXFontIcon fx:id="minimizeIcon" description="fas-circle" size="15.0" styleClass="minimize-icon"/>
+        <MFXFontIcon fx:id="closeIcon" description="fas-circle" size="15.0" styleClass="close-icon"/>
+    </HBox >
+    <!--导航栏-->
+    <VBox prefWidth="250.0" styleClass="sidebar" AnchorPane.bottomAnchor="0.0"
+          AnchorPane.leftAnchor="0.0" AnchorPane.topAnchor="0.0">
+        <padding>
+            <Insets bottom="10.0" left="10.0" top="60.0"/>
+        </padding>
+        <!--logo-->
+        <Label graphicTextGap="15.0" styleClass="header" text="Local In"/>
+        <!--导航-->
+        <MFXScrollPane fx:id="scrollPane" fitToWidth="true" hbarPolicy="NEVER" VBox.vgrow="ALWAYS">
+            <VBox.margin>
+                <Insets bottom="10.0" left="5.0" top="15.0"/>
+            </VBox.margin>
+            <padding>
+                <Insets right="10.0"/>
+            </padding>
+            <VBox fx:id="navBar" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="5.0"
+                  styleClass="navbar"/>
+        </MFXScrollPane>
+    </VBox>
+    <!--内容显示-->
+    <StackPane fx:id="contentPane" layoutX="255.0" layoutY="32.0" styleClass="content-pane"
+               AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="255.0" AnchorPane.rightAnchor="0.0"
+               AnchorPane.topAnchor="30.0"/>
+</AnchorPane>

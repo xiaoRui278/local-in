@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.Label?>
+<AnchorPane styleClass="online-user-pane" stylesheets="@../css/OnlineUser.css" xmlns="http://javafx.com/javafx/17"
+            xmlns:fx="http://javafx.com/fxml/1" fx:controller="wang.xiaorui.local.controllers.OnlineUserController">
+    <VBox alignment="TOP_CENTER" styleClass="user-list-vbox"
+          AnchorPane.leftAnchor="0" AnchorPane.bottomAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0">
+        <padding>
+            <Insets left="20" right="20" top="10" bottom="20"/>
+        </padding>
+        <Label text="确保相互通信的设备处于同一局域网内，设备上线后会自动刷新在线列表" styleClass="info-label"/>
+        <!--一行是一个用户-->
+        <VBox fx:id="userListVBoxNode" spacing="10">
+        </VBox>
+    </VBox>
+</AnchorPane>

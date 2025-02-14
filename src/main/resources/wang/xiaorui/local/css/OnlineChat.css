@@ -1,0 +1,95 @@
+@import '../fonts/Fonts.css';
+@import 'MFXColors.css';
+.online-chat-pane{
+
+}
+
+.online-chat-pane .header{
+    -fx-font-family: 'Open Sans ExtraBold';
+    -fx-font-size: 12;
+    -fx-alignment: center;
+    -fx-pref-width: 145px;
+}
+
+.online-chat-pane .chat-user-box{
+    -fx-pref-width: 145px;
+    -fx-background-color: white;
+    -fx-border-color: #DCDFE6;
+    -fx-border-width: 2 2 0 0; /* 5px 宽的左边框 */
+    -fx-border-insets: 0;
+}
+
+.online-chat-pane .chat-text-area{
+
+}
+
+.online-chat-pane .chat-message-list{
+    -fx-border-color: -mfx-border-base;
+    -fx-border-width: 1px;
+}
+
+.online-chat-pane .chat-message-list .message-item .message-sender{
+
+}
+
+.online-chat-pane .chat-message-list .message-item .message-item-content{
+    -fx-background-color: #F2F3F5;
+    -fx-border-color: black;
+    -fx-border-width: 1px;
+    -fx-border-radius: 0 5px 5px 5px;
+    -fx-wrap-text: true;
+    -fx-pref-width: 400px;
+}
+
+.online-chat-pane .chat-message-list .message-item .me{
+    -fx-border-radius: 5px 0 5px 5px;
+    -fx-background-color: -mfx-blue-secondary;
+}
+
+.online-chat-pane .chat-input{
+    -fx-pref-height: 80;
+}
+
+.no-border{
+    /*-fx-border-style: hidden;*/
+    /*-fx-border-width: 0;*/
+}
+.online-chat-pane .sendBtn {
+    -fx-background-color: -mfx-blue-main;
+    -fx-text-fill: white
+}
+
+.online-chat-pane .chat-user-box .mfx-rectangle-toggle-node {
+    -fx-background-color: transparent;
+    -fx-background-radius: 5;
+    -fx-border-color: #D4D7DE;
+    -fx-border-radius: 5;
+    -fx-pref-height: 40;
+
+    -fx-font-family: 'Open Sans SemiBold';
+    -fx-font-size: 13;
+    -fx-text-fill: #333333;
+}
+
+.online-chat-pane .chat-user-box .mfx-rectangle-toggle-node .mfx-ripple-generator {
+    -mfx-paused: true;
+}
+
+.online-chat-pane .chat-user-box .mfx-rectangle-toggle-node .mfx-icon-wrapper .mfx-font-icon {
+    -mfx-color: #333333;
+}
+
+.online-chat-pane .chat-user-box .mfx-rectangle-toggle-node:selected {
+    -fx-background-color: -mfx-blue-tertiary;
+    -fx-background-radius: 5;
+    -fx-text-fill: white
+}
+
+.online-chat-pane .chat-user-box .mfx-rectangle-toggle-node:selected .selection-rectangle {
+    -fx-stroke: transparent;
+    -fx-fill: -mfx-blue-main;
+}
+
+.main-pane .chat-user-box .mfx-rectangle-toggle-node:selected .mfx-icon-wrapper .mfx-font-icon {
+    -mfx-color: white;
+}

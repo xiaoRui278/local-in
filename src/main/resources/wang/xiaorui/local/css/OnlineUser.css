@@ -1,0 +1,40 @@
+@import '../fonts/Fonts.css';
+@import 'MFXColors.css';
+.online-user-pane{
+
+}
+
+.online-user-pane .info-label{
+    -fx-text-fill: #909399;
+}
+
+.online-user-pane .user-list-vbox{
+    -fx-background-radius: 0 0 10 0;
+    -fx-border-radius: 0 0 10 0;
+}
+
+.online-user-pane .user-item-hbox{
+    -fx-background-color: -mfx-blue-secondary;
+    -fx-pref-height: 80px;
+    -fx-pref-width: 600px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
+
+.online-user-pane .user-item-hbox .user-icon{
+    -mfx-color: -mfx-info;
+}
+
+.online-user-pane .user-item-hbox .user-name-label{
+    -fx-font-family: 'Comfortaa Bold';
+    -fx-font-size: 24px;
+    -fx-text-fill: -mfx-onyx;
+}
+
+.online-user-pane .user-item-hbox .user-name-ip{
+    -fx-font-size: 14px;
+    -fx-text-fill: -mfx-info;
+    -fx-background-color:-mfx-blue-tertiary;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+}
