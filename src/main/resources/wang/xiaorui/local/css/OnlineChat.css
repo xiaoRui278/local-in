@@ -29,6 +29,10 @@
 }
 
 .online-chat-pane .chat-message-list .message-item .message-sender{
+    -mfx-color: -mfx-blue-main;
+}
+
+.online-chat-pane .user-sender{
 
 }
 
@@ -38,7 +42,7 @@
     -fx-border-width: 1px;
     -fx-border-radius: 0 5px 5px 5px;
     -fx-wrap-text: true;
-    -fx-pref-width: 400px;
+    -fx-max-width: 400px;
 }
 
 .online-chat-pane .chat-message-list .message-item .me{

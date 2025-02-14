@@ -23,6 +23,7 @@ import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import wang.xiaorui.local.handler.MessageBuilderHandler;
 import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.ConnectionListener;
 import wang.xiaorui.local.server.LocalInMessageObserver;
@@ -45,10 +46,13 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
     public TextArea chatInput;
 
     private final ToggleGroup toggleGroup;
-    @FXML
-    public VBox chatUserListBox;
+//    @FXML
+//    public VBox chatUserListBox;
     @FXML
     public AnchorPane onlineChatPane;
+
+    @FXML
+    public VBox messageItemBox;
 
     private LocalInUser currentSelectUser;
     private Stage stage;
@@ -79,12 +83,13 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
     }
 
     public void sendMessage(ActionEvent actionEvent) {
-        if (currentSelectUser == null) {
-            this.openError("无法找到用户", "消息无法发送，发送消息前需要点击左侧用户列表，选中制定用户之后进行发送");
+        String text = chatInput.getText().trim();
+        if(text.isEmpty()){
             return;
         }
-        currentSelectUser.getController().send(chatInput.getText());
+//        currentSelectUser.getController().send(text);
         chatInput.clear();
+        messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
         System.out.println("发送一条消息");
     }
 
@@ -116,72 +121,55 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
         //initUserList();
     }
 
-    public void initUserList(ConnectionCache connectionCache) {
-        Platform.runLater(() -> {
-            chatUserListBox.getChildren().clear();
-        });
-        Collection<LocalInUser> allPeers = connectionCache.getAllPeers();
-        List<ToggleButton> toggleButtons = new ArrayList<>();
-        if (!allPeers.isEmpty()) {
-            for (LocalInUser user : allPeers) {
-                toggleButtons.add(createToggleAction(user));
-            }
-            Platform.runLater(() -> {
-                chatUserListBox.getChildren().setAll(toggleButtons);
-            });
-        }
-    }
+//    public void initUserList(ConnectionCache connectionCache) {
+//        Platform.runLater(() -> {
+//            chatUserListBox.getChildren().clear();
+//        });
+//        Collection<LocalInUser> allPeers = connectionCache.getAllPeers();
+//        List<ToggleButton> toggleButtons = new ArrayList<>();
+//        if (!allPeers.isEmpty()) {
+//            for (LocalInUser user : allPeers) {
+//                toggleButtons.add(createToggleAction(user));
+//            }
+//            Platform.runLater(() -> {
+//                chatUserListBox.getChildren().setAll(toggleButtons);
+//            });
+//        }
+//    }
 
-    private ToggleButton createToggleAction(LocalInUser user) {
-        List<String> hostAddress = user.getHostAddress();
-        String clientIp = hostAddress.get(0);
-        String clientName = "匿名用户" + clientIp.substring(clientIp.lastIndexOf("."));
-        ToggleButton toggle = createToggle(clientName);
-        toggle.setOnAction(actionEvent -> {
-            currentSelectUser = user;
-        });
-        return toggle;
-    }
+//    private ToggleButton createToggleAction(LocalInUser user) {
+//        List<String> hostAddress = user.getHostAddress();
+//        String clientIp = hostAddress.get(0);
+//        String clientName = "匿名用户" + clientIp.substring(clientIp.lastIndexOf("."));
+//        ToggleButton toggle = createToggle(clientName);
+//        toggle.setOnAction(actionEvent -> {
+//            currentSelectUser = user;
+//        });
+//        return toggle;
+//    }
 
-    private ToggleButton createToggle(String text) {
-        MFXIconWrapper wrapper = new MFXIconWrapper("fas-circle-user", 24, 32);
-        MFXRectangleToggleNode toggleNode = new MFXRectangleToggleNode(text, wrapper);
-        toggleNode.setAlignment(Pos.CENTER_LEFT);
-        toggleNode.setMaxWidth(136);
-        toggleNode.setToggleGroup(toggleGroup);
-        return toggleNode;
-    }
-
-
-    private void openError(String title, String message) {
-        MFXFontIcon errorIcon = new MFXFontIcon("fas-circle-xmark", 18);
-        dialogContent.setHeaderIcon(errorIcon);
-        dialogContent.setHeaderText(title);
-        dialogContent.setContentText(message);
-        convertDialogTo("mfx-error-dialog");
-        dialog.showDialog();
-    }
-
-    private void convertDialogTo(String styleClass) {
-        dialogContent.getStyleClass().removeIf(
-                s -> s.equals("mfx-info-dialog") || s.equals("mfx-warn-dialog") || s.equals("mfx-error-dialog")
-        );
-
-        if (styleClass != null)
-            dialogContent.getStyleClass().add(styleClass);
-    }
+//    private ToggleButton createToggle(String text) {
+//        MFXIconWrapper wrapper = new MFXIconWrapper("fas-circle-user", 24, 32);
+//        MFXRectangleToggleNode toggleNode = new MFXRectangleToggleNode(text, wrapper);
+//        toggleNode.setAlignment(Pos.CENTER_LEFT);
+//        toggleNode.setMaxWidth(136);
+//        toggleNode.setToggleGroup(toggleGroup);
+//        return toggleNode;
+//    }
 
     @Override
     public void onAdd(PeerId peerId, ConnectionCache connectionCache) {
-        initUserList(connectionCache);
+        //initUserList(connectionCache);
     }
 
     @Override
     public void onRemove(PeerId peerId, ConnectionCache connectionCache) {
-        initUserList(connectionCache);
+        //initUserList(connectionCache);
     }
 
     @Override
     public void onMessage(String message) {
+        messageItemBox.getChildren().add(MessageBuilderHandler.handleOtherMessage(message));
     }
+
 }
