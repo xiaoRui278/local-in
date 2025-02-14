@@ -39,6 +39,11 @@ public class OnlineUserController implements Initializable, ConnectionListener {
 
     private static volatile OnlineUserController instance;
 
+    /**
+     * 获取 OnlineUserController 的单例实例
+     *
+     * @return OnlineUserController 的单例实例
+     */
     public static OnlineUserController getInstance() {
         if (instance == null) {
             synchronized (OnlineUserController.class) {
