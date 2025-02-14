@@ -46,7 +46,7 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
     public TextArea chatInput;
 
     private final ToggleGroup toggleGroup;
-//    @FXML
+    //    @FXML
 //    public VBox chatUserListBox;
     @FXML
     public AnchorPane onlineChatPane;
@@ -84,10 +84,15 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
 
     public void sendMessage(ActionEvent actionEvent) {
         String text = chatInput.getText().trim();
-        if(text.isEmpty()){
+        if (text.isEmpty()) {
             return;
         }
-//        currentSelectUser.getController().send(text);
+        //此处发送的都是群发消息
+        Collection<LocalInUser> allPeers = ConnectionCache.getInstance().getAllPeers();
+        for (LocalInUser user : allPeers) {
+            String groupMessage = "/group" + text;
+            user.getController().send(groupMessage);
+        }
         chatInput.clear();
         messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
         System.out.println("发送一条消息");
