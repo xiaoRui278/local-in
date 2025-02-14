@@ -23,7 +23,7 @@ public class MessageBuilderHandler {
         MFXFontIcon avatar = new MFXFontIcon();
         avatar.setDescription("fas-circle-user");
         avatar.setSize(24.0);
-        avatar.getStyleClass().add("message-sender");
+//        avatar.getStyleClass().add("message-sender");
 
         // 创建消息正文
         Label messageContent = new Label(message);
