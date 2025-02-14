@@ -1,5 +1,6 @@
 package wang.xiaorui.local.controllers;
 
+import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import io.libp2p.core.PeerId;
 import javafx.application.Platform;
@@ -116,12 +117,19 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         chatIcon.getStyleClass().add("user-icon");
         chatIcon.setOnMouseClicked(event -> {
             System.out.println("---->点击了["+user.getName()+"]");
+            //此处直接打开一个弹框吧
+            openChatWindow(user);
         });
 
         userItem.getChildren().addAll(icon, userInfoVBox, chatIcon);
         HBox.setHgrow(userInfoVBox, Priority.ALWAYS);
         return userItem;
     }
+
+    private void openChatWindow(LocalInUser user){
+        MFXLoader loader = new MFXLoader();
+    }
+
 
     @Override
     public void onAdd(PeerId peerId, ConnectionCache connectionCache) {

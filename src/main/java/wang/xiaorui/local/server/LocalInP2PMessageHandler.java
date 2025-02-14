@@ -46,12 +46,18 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
     @Override
     public void onMessage(Stream stream, ByteBuf msg) {
         System.out.println("---LocalInP2PMessageHandler>>>onMessage[" + stream.remotePeerId().toBase58() + "]----->");
-        String string = msg.toString(StandardCharsets.UTF_8);
-        System.out.println("---LocalInP2PMessageHandler>>>onMessage---[" + string + "]-->");
-        //渲染消息
-        messageObservers.forEach(m -> {
-            m.onMessage(string);
-        });
+        String message = msg.toString(StandardCharsets.UTF_8);
+        System.out.println("---LocalInP2PMessageHandler>>>onMessage---[" + message + "]-->");
+        if(null == message || message.isEmpty()){
+            return;
+        }
+        if(message.startsWith("/group")){
+            //群发消息
+            //渲染消息
+            messageObservers.forEach(m -> {
+                m.onMessage(message);
+            });
+        }
     }
 
     @Override
