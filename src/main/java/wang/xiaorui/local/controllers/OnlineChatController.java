@@ -174,7 +174,9 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
 
     @Override
     public void onMessage(String message) {
-        messageItemBox.getChildren().add(MessageBuilderHandler.handleOtherMessage(message));
+        Platform.runLater(()-> {
+            messageItemBox.getChildren().add(MessageBuilderHandler.handleOtherMessage(message));
+        });
     }
 
 }
