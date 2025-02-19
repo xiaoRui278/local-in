@@ -38,7 +38,6 @@ public class P2PServer {
         localInetAddress = NetworkUtil.getLocalInetAddress();
         String hostAddress = localInetAddress.getHostAddress();
         this.messageHandlerFactoryInstance = getMessageHandlerFactory();
-        System.out.println("--本机IP地址-->" + hostAddress);
     }
 
     /**

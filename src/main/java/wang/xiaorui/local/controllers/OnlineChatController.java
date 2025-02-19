@@ -95,7 +95,6 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
         }
         chatInput.clear();
         messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
-        System.out.println("发送一条消息");
     }
 
     @Override

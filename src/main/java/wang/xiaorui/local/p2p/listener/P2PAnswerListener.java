@@ -33,10 +33,6 @@ public class P2PAnswerListener implements AnswerListener {
 
     @Override
     public void answersReceived(List<DNSRecord> answers) {
-        System.out.println("===P2PAnswerListener>>>answersReceived===>");
-        for (DNSRecord answer : answers) {
-            System.out.println("answer:[" + answer.getType() + "]" + answer.getKey());
-        }
         DNSRecord txtRecordS = answers.stream()
                 .filter(answer -> DNSRecordType.TYPE_TXT.equals(answer.getRecordType()))
                 .findFirst().orElse(null);
@@ -81,9 +77,6 @@ public class P2PAnswerListener implements AnswerListener {
                 hostAddress.add(ipv6);
             });
         }
-        multiAddrs.forEach(m -> {
-            System.out.println("--P2PAnswerListener------[" + peerId.toBase58() + "]->" + m.toString());
-        });
         PeerInfo peerInfo = new PeerInfo(peerId, multiAddrs);
         //调用节点通知接口
         peerFounders.forEach(peerFounder -> peerFounder.peerFound(host, peerInfo, hostAddress));

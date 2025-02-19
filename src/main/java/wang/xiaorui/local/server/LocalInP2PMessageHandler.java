@@ -30,26 +30,21 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
 
     @Override
     public void onActivated(Stream stream) {
-        System.out.println("---LocalInP2PMessageHandler>>>onActivated[" + stream.remotePeerId().toBase58() + "]----->");
     }
 
     @Override
     public void onClosed(Stream stream) {
-        System.out.println("---LocalInP2PMessageHandler>>>onClosed[" + stream.remotePeerId().toBase58() + "]----->");
         connectionCache.removePeer(stream.remotePeerId());
     }
 
     @Override
     public void onException(Throwable cause) {
-        System.out.println("---LocalInP2PMessageHandler>>>onException[" + stream.remotePeerId().toBase58() + "]----->");
     }
 
     @Override
     public void onMessage(Stream stream, ByteBuf msg) {
         String fromUser = stream.remotePeerId().toBase58();
-        System.out.println("---LocalInP2PMessageHandler>>>onMessage[" + fromUser + "]----->");
         String message = msg.toString(StandardCharsets.UTF_8);
-        System.out.println("---LocalInP2PMessageHandler>>>onMessage---[" + message + "]-->");
         if (null == message || message.isEmpty()) {
             return;
         }
@@ -74,7 +69,6 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
 
     @Override
     public void send(String message) {
-        System.out.println("---LocalInP2PMessageHandler>>>send[" + stream.remotePeerId().toBase58() + "]----->");
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
         ByteBuf messageBuf = Unpooled.wrappedBuffer(bytes);// Unpooled.copiedBuffer(message, StandardCharsets.UTF_8);
         stream.writeAndFlush(messageBuf);

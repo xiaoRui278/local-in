@@ -47,12 +47,10 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
         chatInput.clear();
         messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
         PersonalMessageHandler.getInstance().sendMessage(user.getName(), text);
-        System.out.println("发送一条消息");
     }
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        System.out.println("--PersonalChatController.initialize--->");
         List<MessageCache> cacheByUserName =
                 PersonalMessageHandler.getInstance().getCacheByUserName(user.getName());
         if (cacheByUserName != null) {
