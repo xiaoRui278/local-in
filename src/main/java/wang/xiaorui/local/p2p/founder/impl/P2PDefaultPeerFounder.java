@@ -45,7 +45,7 @@ public class P2PDefaultPeerFounder implements P2PPeerFounder {
             return;
         }
         //首次连接成功之后询问对方身份
-        connection.getValue().send("/local-in-who");
+        connection.getValue().sendMessage("/local-in-who");
         peers.put(peerInfo.getPeerId(), new P2PUser(peerInfo.getPeerId().toBase58(), connection.getValue()));
     }
 

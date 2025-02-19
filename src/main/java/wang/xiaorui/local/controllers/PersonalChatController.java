@@ -9,8 +9,8 @@ import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import wang.xiaorui.local.handler.MessageBuilderHandler;
 import wang.xiaorui.local.handler.MessageCache;
-import wang.xiaorui.local.handler.PersonalMessageHandler;
-import wang.xiaorui.local.handler.PersonalMessageObserver;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
+import wang.xiaorui.local.handler.observer.PersonalMessageObserver;
 import wang.xiaorui.local.server.LocalInUser;
 
 import java.net.URL;
@@ -41,18 +41,16 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
         if (text.isEmpty()) {
             return;
         }
-        //此处发送的都是群发消息
-        String personalMessage = "/personal/" + user.getName() + "/" + text;
-        user.getController().send(personalMessage);
+        //发送个人消息
+        LocalInMessageForwarder.getInstance().sendPersonalMessage(user, text);
         chatInput.clear();
         messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
-        PersonalMessageHandler.getInstance().sendMessage(user.getName(), text);
     }
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         List<MessageCache> cacheByUserName =
-                PersonalMessageHandler.getInstance().getCacheByUserName(user.getName());
+                LocalInMessageForwarder.getInstance().getCacheByUserName(user.getName());
         if (cacheByUserName != null) {
             for (MessageCache messageCache : cacheByUserName) {
                 if (user.getName().equals(messageCache.getUserName())) {

@@ -1,4 +1,4 @@
-package wang.xiaorui.local.handler;
+package wang.xiaorui.local.handler.observer;
 
 public interface PersonalMessageObserver {
 

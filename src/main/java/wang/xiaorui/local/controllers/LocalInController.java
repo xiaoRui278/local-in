@@ -18,6 +18,7 @@ import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.server.ConnectionCache;
 
 import java.net.URL;
@@ -103,6 +104,8 @@ public class LocalInController implements Initializable {
                 .setControllerFactory(c -> {
                     OnlineChatController onlineChatController = OnlineChatController.getInstance();
                     onlineChatController.setStage(stage);
+                    //注册自己到群消息收发器
+                    LocalInMessageForwarder.getInstance().addMessageObserver(onlineChatController);
                     connectionCache.addListener(onlineChatController);
                     return onlineChatController;
                 })

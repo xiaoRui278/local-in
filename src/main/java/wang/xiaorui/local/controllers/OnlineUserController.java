@@ -1,27 +1,23 @@
 package wang.xiaorui.local.controllers;
 
-import io.github.palexdev.materialfx.controls.MFXButton;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
 import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
 import io.github.palexdev.materialfx.enums.ScrimPriority;
-import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import io.libp2p.core.PeerId;
 import javafx.application.Platform;
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Parent;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import wang.xiaorui.local.MFXDemoResourcesLoader;
-import wang.xiaorui.local.handler.PersonalMessageHandler;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.ConnectionListener;
 import wang.xiaorui.local.server.LocalInUser;
@@ -145,7 +141,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         FXMLLoader loader = new FXMLLoader(MFXDemoResourcesLoader.loadURL("fxmls/PersonalChat.fxml"));
         loader.setControllerFactory(c -> {
             PersonalChatController personalChatController = new PersonalChatController(user);
-            PersonalMessageHandler.getInstance().addMessageObserver(user.getName(), personalChatController);
+            LocalInMessageForwarder.getInstance().addPersonalObserver(user.getName(), personalChatController);
             return personalChatController;
         });
         MFXGenericDialog mfxGenericDialog = null;
