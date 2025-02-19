@@ -2,9 +2,12 @@ package wang.xiaorui.local.controllers;
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.TextArea;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import wang.xiaorui.local.handler.MessageBuilderHandler;
@@ -60,6 +63,17 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
                 }
             }
         }
+
+        //回车发送
+        chatInput.setOnKeyPressed(new EventHandler<KeyEvent>() {
+            @Override
+            public void handle(KeyEvent event) {
+                if (event.getCode() == KeyCode.ENTER) {
+                    sendMessage(null);
+                    event.consume();
+                }
+            }
+        });
     }
 
     @Override
