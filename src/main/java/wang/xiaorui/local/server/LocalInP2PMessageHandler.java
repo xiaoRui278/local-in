@@ -3,6 +3,7 @@ package wang.xiaorui.local.server;
 import io.libp2p.core.Stream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import wang.xiaorui.local.handler.PersonalMessageHandler;
 import wang.xiaorui.local.p2p.message.P2PAbstractMessageHandler;
 
 import java.nio.charset.StandardCharsets;
@@ -45,7 +46,8 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
 
     @Override
     public void onMessage(Stream stream, ByteBuf msg) {
-        System.out.println("---LocalInP2PMessageHandler>>>onMessage[" + stream.remotePeerId().toBase58() + "]----->");
+        String fromUser = stream.remotePeerId().toBase58();
+        System.out.println("---LocalInP2PMessageHandler>>>onMessage[" + fromUser + "]----->");
         String message = msg.toString(StandardCharsets.UTF_8);
         System.out.println("---LocalInP2PMessageHandler>>>onMessage---[" + message + "]-->");
         if (null == message || message.isEmpty()) {
@@ -60,6 +62,13 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
                 messageObserver.onMessage(message);
             }
             return;
+        }
+        if(message.startsWith("/personal")){
+            message = message.substring("/personal".length());
+            int splitIndex = message.indexOf("/");
+            String toUser = message.substring(0, splitIndex + 1);
+            String text = message.substring(splitIndex + 1);
+            PersonalMessageHandler.getInstance().onMessage(fromUser, text);
         }
     }
 

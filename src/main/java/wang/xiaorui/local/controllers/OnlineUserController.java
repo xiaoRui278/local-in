@@ -1,27 +1,34 @@
 package wang.xiaorui.local.controllers;
 
+import io.github.palexdev.materialfx.controls.MFXButton;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
+import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
+import io.github.palexdev.materialfx.enums.ScrimPriority;
 import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import io.libp2p.core.PeerId;
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Parent;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
+import wang.xiaorui.local.MFXDemoResourcesLoader;
+import wang.xiaorui.local.handler.PersonalMessageHandler;
 import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.ConnectionListener;
 import wang.xiaorui.local.server.LocalInUser;
 
+import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.ResourceBundle;
+import java.util.*;
 
 /**
  * @author wangxiaorui
@@ -32,10 +39,14 @@ public class OnlineUserController implements Initializable, ConnectionListener {
 
     @FXML
     public VBox userListVBoxNode;
+    @FXML
+    public AnchorPane onlineUserPane;
 
     private Stage stage;
 
-    private OnlineUserController(){
+    private Pane rootPane;
+
+    private OnlineUserController() {
     }
 
     private static volatile OnlineUserController instance;
@@ -53,6 +64,10 @@ public class OnlineUserController implements Initializable, ConnectionListener {
 
     public void setStage(Stage stage) {
         this.stage = stage;
+    }
+
+    public void setRootPane(Pane rootPane) {
+        this.rootPane = rootPane;
     }
 
     @Override
@@ -74,7 +89,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
                 //正则获取IP地址
                 allUserHbox.add(buildUserItem(user));
             }
-            Platform.runLater(()-> {
+            Platform.runLater(() -> {
                 userListVBoxNode.getChildren().setAll(allUserHbox);
             });
         }
@@ -116,7 +131,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         MFXFontIcon chatIcon = new MFXFontIcon("fas-comment-dots", 30);
         chatIcon.getStyleClass().add("user-icon");
         chatIcon.setOnMouseClicked(event -> {
-            System.out.println("---->点击了["+user.getName()+"]");
+            System.out.println("---->点击了[" + user.getName() + "]");
             //此处直接打开一个弹框吧
             openChatWindow(user);
         });
@@ -126,8 +141,42 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         return userItem;
     }
 
-    private void openChatWindow(LocalInUser user){
-        MFXLoader loader = new MFXLoader();
+    public void openChatWindow(LocalInUser user) {
+//    public void openChatWindow(ActionEvent event) {
+        //构建Dialog内容
+        FXMLLoader loader = new FXMLLoader(MFXDemoResourcesLoader.loadURL("fxmls/PersonalChat.fxml"));
+        loader.setControllerFactory(c -> {
+            PersonalChatController personalChatController = new PersonalChatController(user);
+            PersonalMessageHandler.getInstance().addMessageObserver(user.getName(), personalChatController);
+            return personalChatController;
+        });
+        MFXGenericDialog mfxGenericDialog = null;
+        try {
+            mfxGenericDialog = MFXGenericDialogBuilder.build()
+                    .setContent(loader.load())
+//                        .makeScrollable(true)
+                    .get();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        //构建dialog
+        MFXStageDialog dialog = MFXGenericDialogBuilder.build(mfxGenericDialog)
+                .setShowMinimize(false)
+                .setShowAlwaysOnTop(false)
+                .toStageDialogBuilder()
+                .initOwner(stage)
+                .initModality(Modality.APPLICATION_MODAL)
+                .setDraggable(false)
+                .setTitle("与[" + user.getHostAddress().get(0) + "]聊天")
+                .setOwnerNode(rootPane)
+                .setScrimPriority(ScrimPriority.WINDOW)
+                .setScrimOwner(true)
+                .get();
+        mfxGenericDialog.setMaxSize(800, 600);
+        mfxGenericDialog.setPrefHeight(600);
+        dialog.setHeight(600);
+        dialog.setWidth(800);
+        Platform.runLater(dialog::showDialog);
     }
 
 

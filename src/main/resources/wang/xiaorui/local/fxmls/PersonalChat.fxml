@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import io.github.palexdev.materialfx.controls.MFXButton?>
+<?import io.github.palexdev.materialfx.controls.MFXScrollPane?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.*?>
+<AnchorPane xmlns="http://javafx.com/javafx/17"
+            styleClass="personal-chat-pane" stylesheets="@../css/PersonalChat.css"
+            fx:controller="wang.xiaorui.local.controllers.PersonalChatController"
+            fx:id="personalChatPane"
+            xmlns:fx="http://javafx.com/fxml">
+    <VBox AnchorPane.leftAnchor="1" AnchorPane.bottomAnchor="10" AnchorPane.topAnchor="0" AnchorPane.rightAnchor="2"
+          spacing="10">
+        <MFXScrollPane styleClass="chat-message-list" hbarPolicy="NEVER"
+                       fitToWidth="true" VBox.vgrow="ALWAYS">
+            <VBox maxHeight="1.7976931348623157E308" fx:id="messageItemBox" maxWidth="1.7976931348623157E308" spacing="5.0">
+            </VBox>
+        </MFXScrollPane>
+        <HBox alignment="BOTTOM_LEFT" spacing="10" prefHeight="80" minHeight="80">
+            <padding>
+                <Insets left="1" right="1"/>
+            </padding>
+            <TextArea fx:id="chatInput" styleClass="chat-input" prefHeight="80" HBox.hgrow="ALWAYS"/>
+            <MFXButton onAction="#sendMessage" id="custom" styleClass="sendBtn" minHeight="27.0" minWidth="70.0"
+                       text="发送"/>
+        </HBox>
+    </VBox>
+</AnchorPane>
