@@ -25,6 +25,7 @@ public class LocalInApplication extends Application {
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     private P2PServer p2PServer;
+
     @Override
     public void start(Stage primaryStage) throws IOException {
         //启动CSSFX,允许程序动态修改CSS样式

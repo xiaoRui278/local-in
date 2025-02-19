@@ -4,6 +4,7 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.control.Label?>
 <AnchorPane styleClass="online-user-pane" stylesheets="@../css/OnlineUser.css" xmlns="http://javafx.com/javafx/17"
+            fx:id="onlineUserPane"
             xmlns:fx="http://javafx.com/fxml/1" fx:controller="wang.xiaorui.local.controllers.OnlineUserController">
     <VBox alignment="TOP_CENTER" styleClass="user-list-vbox"
           AnchorPane.leftAnchor="0" AnchorPane.bottomAnchor="0" AnchorPane.rightAnchor="0" AnchorPane.topAnchor="0">

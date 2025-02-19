@@ -1,0 +1,45 @@
+@import '../fonts/Fonts.css';
+@import 'MFXColors.css';
+
+.personal-chat-pane{
+
+}
+.personal-chat-pane .chat-message-list{
+    -fx-border-color: -mfx-border-base;
+    -fx-border-width: 1px;
+}
+
+.personal-chat-pane .chat-message-list .message-item .message-sender{
+    -mfx-color: -mfx-blue-main;
+}
+
+.personal-chat-pane .user-sender{
+
+}
+
+.personal-chat-pane .chat-message-list .message-item .message-item-content{
+    -fx-background-color: #F2F3F5;
+    -fx-border-color: black;
+    -fx-border-width: 1px;
+    -fx-border-radius: 0 5px 5px 5px;
+    -fx-wrap-text: true;
+    -fx-max-width: 400px;
+}
+
+.personal-chat-pane .chat-message-list .message-item .me{
+    -fx-border-radius: 5px 0 5px 5px;
+    -fx-background-color: -mfx-blue-secondary;
+}
+
+.personal-chat-pane .chat-input{
+    -fx-pref-height: 80;
+}
+
+.no-border{
+    /*-fx-border-style: hidden;*/
+    /*-fx-border-width: 0;*/
+}
+.personal-chat-pane .sendBtn {
+    -fx-background-color: -mfx-blue-main;
+    -fx-text-fill: white
+}

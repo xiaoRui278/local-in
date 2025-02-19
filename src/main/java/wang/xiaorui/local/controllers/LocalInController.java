@@ -12,13 +12,11 @@ import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
+import javafx.scene.Parent;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import wang.xiaorui.local.server.ConnectionCache;
 
@@ -56,7 +54,6 @@ public class LocalInController implements Initializable {
     public StackPane contentPane;
 
     private final ConnectionCache connectionCache;
-
 
     public LocalInController(Stage stage) {
         this.stage = stage;
@@ -96,6 +93,7 @@ public class LocalInController implements Initializable {
                 .setControllerFactory(c -> {
                     OnlineUserController onlineUserController = OnlineUserController.getInstance();
                     onlineUserController.setStage(stage);
+                    onlineUserController.setRootPane(rootPane);
                     connectionCache.addListener(onlineUserController);
                     return onlineUserController;
                 })
