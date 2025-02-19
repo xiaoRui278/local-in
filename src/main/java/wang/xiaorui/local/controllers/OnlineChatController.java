@@ -13,12 +13,15 @@ import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import io.libp2p.core.PeerId;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
@@ -123,6 +126,17 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
             dialogContent.setMaxSize(300, 100);
         });
         //initUserList();
+
+        //回车发送
+        chatInput.setOnKeyPressed(new EventHandler<KeyEvent>() {
+            @Override
+            public void handle(KeyEvent event) {
+                if (event.getCode() == KeyCode.ENTER) {
+                    sendMessage(null);
+                    event.consume();
+                }
+            }
+        });
     }
 
 //    public void initUserList(ConnectionCache connectionCache) {
