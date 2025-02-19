@@ -69,7 +69,6 @@ public class LocalInApplication extends Application {
 
     @Override
     public void stop() throws Exception {
-        System.out.println("=======stop=======");
         if (p2PServer != null) {
             p2PServer.stop();
         }

@@ -72,7 +72,6 @@ public class OnlineUserController implements Initializable, ConnectionListener {
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        System.out.println("OnlineUserController>>>>>>>>initialize");
     }
 
     /**
@@ -131,7 +130,6 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         MFXFontIcon chatIcon = new MFXFontIcon("fas-comment-dots", 30);
         chatIcon.getStyleClass().add("user-icon");
         chatIcon.setOnMouseClicked(event -> {
-            System.out.println("---->点击了[" + user.getName() + "]");
             //此处直接打开一个弹框吧
             openChatWindow(user);
         });

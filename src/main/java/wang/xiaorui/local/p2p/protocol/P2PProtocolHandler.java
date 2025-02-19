@@ -23,7 +23,6 @@ public class P2PProtocolHandler extends ProtocolHandler<P2PAbstractMessageHandle
 
     @Override
     protected CompletableFuture<P2PAbstractMessageHandler> onStartInitiator(Stream stream) {
-        System.out.println("----P2PProtocolHandler-onStartInitiator---->");
         P2PAbstractMessageHandler sender = messageHandlerFactory.create(stream);
         stream.pushHandler(sender);
         return CompletableFuture.completedFuture(sender);
@@ -31,7 +30,6 @@ public class P2PProtocolHandler extends ProtocolHandler<P2PAbstractMessageHandle
 
     @Override
     protected CompletableFuture<P2PAbstractMessageHandler> onStartResponder(Stream stream) {
-        System.out.println("----P2PProtocolHandler-onStartResponder---->");
         P2PAbstractMessageHandler receiver =  messageHandlerFactory.create(stream);
         stream.pushHandler(receiver);
         return CompletableFuture.completedFuture(receiver);
