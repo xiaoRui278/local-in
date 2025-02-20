@@ -35,5 +35,6 @@ P2P组件：`libp2p(jvm-libp2p)`
 ![暂无用户](/docs/images/online.png)
 ![用户列表](/docs/images/onlineUser.png)
 在线群聊
-
+![在线群聊](docs/images/user2user.png)
 点对点私聊
+![点对点私聊](docs/images/groupChat.png)
