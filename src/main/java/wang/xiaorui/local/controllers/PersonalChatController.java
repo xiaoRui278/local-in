@@ -10,9 +10,9 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.handler.MessageBuilderHandler;
 import wang.xiaorui.local.handler.MessageCache;
-import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.handler.observer.PersonalMessageObserver;
 import wang.xiaorui.local.server.LocalInUser;
 

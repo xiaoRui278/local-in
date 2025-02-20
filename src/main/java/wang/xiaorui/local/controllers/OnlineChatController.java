@@ -7,7 +7,6 @@ import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
 import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
 import io.github.palexdev.materialfx.enums.ScrimPriority;
 import io.github.palexdev.materialfx.utils.ToggleButtonsUtil;
-import io.libp2p.core.PeerId;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
@@ -23,13 +22,11 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.handler.MessageBuilderHandler;
-import wang.xiaorui.local.server.ConnectionCache;
-import wang.xiaorui.local.server.ConnectionListener;
 import wang.xiaorui.local.handler.observer.GroupMessageObserver;
-import wang.xiaorui.local.server.LocalInUser;
 
 import java.net.URL;
-import java.util.*;
+import java.util.Map;
+import java.util.ResourceBundle;
 
 /**
  * @author wangxiaorui
