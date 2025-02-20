@@ -21,7 +21,7 @@
             <padding>
                 <Insets left="1" right="1"/>
             </padding>
-            <TextArea fx:id="chatInput" styleClass="chat-input" prefHeight="80" HBox.hgrow="ALWAYS"/>
+            <TextArea promptText="点击发送按钮或者回车发送消息" fx:id="chatInput" styleClass="chat-input" prefHeight="80" HBox.hgrow="ALWAYS"/>
             <MFXButton onAction="#sendMessage" id="custom" styleClass="sendBtn" minHeight="27.0" minWidth="70.0"
                        text="发送"/>
         </HBox>
