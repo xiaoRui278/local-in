@@ -53,7 +53,6 @@ public class OnlineChatController implements Initializable, GroupMessageObserver
     @FXML
     public VBox messageItemBox;
 
-    private LocalInUser currentSelectUser;
     private Stage stage;
 
     private MFXStageDialog dialog;
