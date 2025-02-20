@@ -6,12 +6,14 @@ import io.github.palexdev.materialfx.controls.MFXScrollPane;
 import io.github.palexdev.materialfx.utils.ToggleButtonsUtil;
 import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
 import io.github.palexdev.materialfx.utils.others.loader.MFXLoaderBean;
+import io.github.palexdev.mfxresources.fonts.IconsProviders;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import javafx.application.Platform;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
+import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseEvent;
@@ -23,6 +25,10 @@ import javafx.stage.Stage;
 import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.server.ConnectionCache;
 
+import java.awt.*;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import java.util.ResourceBundle;
@@ -36,6 +42,10 @@ import static wang.xiaorui.local.MFXDemoResourcesLoader.loadURL;
  */
 public class LocalInController implements Initializable {
     private final Stage stage;
+    @FXML
+    public MFXFontIcon githubIcon;
+    @FXML
+    public Label githubLink;
     private double xOffset;
     private double yOffset;
     private final ToggleGroup toggleGroup;
@@ -84,6 +94,22 @@ public class LocalInController implements Initializable {
         });
 
         initializeLoader();
+
+        githubIcon.setIconsProvider(IconsProviders.FONTAWESOME_BRANDS);
+        githubIcon.setDescription("fab-github");
+
+        githubLink.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
+            if (Desktop.isDesktopSupported()) {
+                Desktop desktop = Desktop.getDesktop();
+                if (desktop.isSupported(Desktop.Action.BROWSE)) {
+                    try {
+                        desktop.browse(new URI("https://github.com/xiaoRui278/local-in"));
+                    } catch (IOException | URISyntaxException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
     }
 
     private void initializeLoader() {

@@ -14,6 +14,7 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import wang.xiaorui.local.controllers.LocalInController;
 import wang.xiaorui.local.p2p.P2PServer;
+import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.LocalInP2PServer;
 
 import java.io.IOException;
@@ -69,6 +70,7 @@ public class LocalInApplication extends Application {
 
     @Override
     public void stop() throws Exception {
+        ConnectionCache.getInstance().stop();
         if (p2PServer != null) {
             p2PServer.stop();
         }

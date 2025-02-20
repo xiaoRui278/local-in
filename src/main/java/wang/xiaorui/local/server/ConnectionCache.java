@@ -56,16 +56,42 @@ public class ConnectionCache {
         connectionListeners.forEach(listener -> listener.onAdd(peerId, this));
     }
 
+    /**
+     * 移除链接
+     * @param peerId ID
+     */
     public void removePeer(PeerId peerId) {
-        peers.remove(peerId);
+        if(peers.containsKey(peerId)){
+            peers.get(peerId).getController().getStream().close();
+            peers.remove(peerId);
+        }
         connectionListeners.forEach(listener -> listener.onRemove(peerId, this));
     }
 
+    /**
+     * 根据ID查询链接信息
+     * @param peerId ID
+     * @return 链接信息
+     */
     public P2PUser getPeer(PeerId peerId) {
         return peers.get(peerId);
     }
 
+    /**
+     * 获取所有链接
+     * @return 所有链接
+     */
     public Collection<LocalInUser> getAllPeers() {
         return peers.values();
+    }
+
+    /**
+     * 停止连接缓存，关闭连接
+     */
+    public void stop(){
+        for (LocalInUser value : peers.values()) {
+            value.getController().getStream().close();
+        }
+        connectionListeners.clear();
     }
 }
