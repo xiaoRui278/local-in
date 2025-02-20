@@ -200,9 +200,16 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
     public void onMessage(String fromUser, String message) {
         //收到消息刷新页面样式，让用户知道收到了消息
         userListVBoxNode.getChildren().forEach(hBox -> {
-            if (hBox.getId().equals(Constants.USER_ITEM_HBOX_PREFIX + fromUser) && !flashing.contains(fromUser)) {
+            if (hBox instanceof HBox currentNode && hBox.getId().equals(Constants.USER_ITEM_HBOX_PREFIX + fromUser) && !flashing.contains(fromUser)) {
+                //图标
+                MFXFontIcon iconNode = currentNode.getChildren().stream()
+                        .filter(node -> node instanceof MFXFontIcon && node.getId() != null && node.getId().equals(Constants.USER_CHAT_ICON_PREFIX + fromUser))
+                        .map(x -> (MFXFontIcon) x).findFirst().orElse(null);
+                if (null == iconNode) {
+                    return;
+                }
                 flashing.add(fromUser);
-                Timeline timelineAnimation = getTimelineAnimation(hBox);
+                Timeline timelineAnimation = getTimelineAnimation(currentNode, iconNode);
                 Platform.runLater(() -> {
                     // 启动动画
                     timelineAnimation.play();
@@ -210,6 +217,8 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
                     pause.setOnFinished(event -> {
                         timelineAnimation.stop();
                         flashing.remove(fromUser);
+                        currentNode.setStyle("-fx-background-color: -mfx-blue-secondary;");
+                        iconNode.setStyle("-mfx-color: -mfx-info;");
                     });
                     pause.play();
                 });
@@ -223,13 +232,22 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
      *
      * @return
      */
-    private Timeline getTimelineAnimation(Node hBox) {
+    private Timeline getTimelineAnimation(HBox hBox, MFXFontIcon icon) {
         AnimationUtils.TimelineBuilder timelineBuilder = AnimationUtils.TimelineBuilder.build()
                 .add(
-                        AnimationUtils.KeyFrames.of(Duration.ZERO, hBox.styleProperty(), "-fx-background-color: -mfx-blue-secondary;"),
-                        AnimationUtils.KeyFrames.of(Duration.millis(500), hBox.styleProperty(), "-fx-background-color: -mfx-blue-tertiary;"),
-                        AnimationUtils.KeyFrames.of(Duration.millis(1000), hBox.styleProperty(), "-fx-background-color: -mfx-blue-secondary;"),
-                        AnimationUtils.KeyFrames.of(Duration.millis(1500), hBox.styleProperty(), "-fx-background-color: -mfx-blue-tertiary;")
+                        AnimationUtils.KeyFrames.of(Duration.ZERO, hBox.styleProperty(), "-fx-background-color: " +
+                                "-mfx-blue-secondary;"),
+                        AnimationUtils.KeyFrames.of(Duration.ZERO, icon.styleProperty(), "-mfx-color: -mfx-info;"),
+
+                        AnimationUtils.KeyFrames.of(Duration.millis(500), hBox.styleProperty(), "-fx-background-color" +
+                                ": -mfx-blue-light;"),
+                        AnimationUtils.KeyFrames.of(Duration.millis(500), icon.styleProperty(), "-mfx-color: " +
+                                "-mfx-success;"),
+
+                        AnimationUtils.KeyFrames.of(Duration.millis(1000), hBox.styleProperty(), "-fx-background" +
+                                "-color: -mfx-blue-secondary;"),
+                        AnimationUtils.KeyFrames.of(Duration.millis(1000), icon.styleProperty(), "-mfx-color: " +
+                                "-mfx-info;")
                 ).setCycleCount(Timeline.INDEFINITE);
         return timelineBuilder.getAnimation();
     }
