@@ -11,7 +11,11 @@
         <padding>
             <Insets left="20" right="20" top="10" bottom="20"/>
         </padding>
-        <Label text="确保相互通信的设备处于同一局域网内，设备上线后会自动刷新在线列表" styleClass="info-label"/>
+        <Label text="确保相互通信的设备处于同一局域网内，设备上线后会自动刷新在线列表" styleClass="info-label">
+            <VBox.margin>
+                <Insets bottom="10"/>
+            </VBox.margin>
+        </Label>
         <!--一行是一个用户-->
         <VBox fx:id="userListVBoxNode" spacing="10">
         </VBox>

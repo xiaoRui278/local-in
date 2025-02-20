@@ -122,7 +122,6 @@ public class LocalInController implements Initializable {
                     .toList();
             navBar.getChildren().setAll(nodes);
         });
-        MFXLoaderBean view = loader.getView("12323");
         loader.start();
     }
 
@@ -136,6 +135,7 @@ public class LocalInController implements Initializable {
         toggleNode.setAlignment(Pos.CENTER_LEFT);
         toggleNode.setMaxWidth(Double.MAX_VALUE);
         toggleNode.setToggleGroup(toggleGroup);
+        toggleNode.setStyle("-fx-cursor: hand;");
         if (rotate != 0) wrapper.getIcon().setRotate(rotate);
         return toggleNode;
     }

@@ -157,8 +157,11 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
         });
         MFXGenericDialog mfxGenericDialog = null;
         try {
+            MFXFontIcon warnIcon = new MFXFontIcon("fas-handshake-simple", 18);
             mfxGenericDialog = MFXGenericDialogBuilder.build()
                     .setContent(loader.load())
+                    .setHeaderIcon(warnIcon)
+                    .setHeaderText("与[" + user.getHostAddress().get(0) + "]的聊天")
                     .get();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -171,13 +174,12 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
                 .initOwner(stage)
                 .initModality(Modality.APPLICATION_MODAL)
                 .setDraggable(false)
-                .setTitle("与[" + user.getHostAddress().get(0) + "]聊天")
                 .setOwnerNode(rootPane)
                 .setScrimPriority(ScrimPriority.WINDOW)
                 .setScrimOwner(true)
                 .get();
-        mfxGenericDialog.setMaxSize(800, 600);
-        mfxGenericDialog.setPrefHeight(600);
+//        mfxGenericDialog.setMaxSize(800, 600);
+//        mfxGenericDialog.setPrefHeight(600);
         dialog.setHeight(600);
         dialog.setWidth(800);
         Platform.runLater(dialog::showDialog);
