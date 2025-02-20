@@ -54,11 +54,8 @@ public class LocalInController implements Initializable {
     @FXML
     public StackPane contentPane;
 
-    private final ConnectionCache connectionCache;
-
     public LocalInController(Stage stage) {
         this.stage = stage;
-        this.connectionCache = ConnectionCache.getInstance();
         this.toggleGroup = new ToggleGroup();
         ToggleButtonsUtil.addAlwaysOneSelectedSupport(toggleGroup);
     }
@@ -95,7 +92,7 @@ public class LocalInController implements Initializable {
                     OnlineUserController onlineUserController = OnlineUserController.getInstance();
                     onlineUserController.setStage(stage);
                     onlineUserController.setRootPane(rootPane);
-                    connectionCache.addListener(onlineUserController);
+                    ConnectionCache.getInstance().addListener(onlineUserController);
                     return onlineUserController;
                 })
                 .setDefaultRoot(true).get());
@@ -106,7 +103,6 @@ public class LocalInController implements Initializable {
                     onlineChatController.setStage(stage);
                     //注册自己到群消息收发器
                     LocalInMessageForwarder.getInstance().addMessageObserver(onlineChatController);
-                    connectionCache.addListener(onlineChatController);
                     return onlineChatController;
                 })
                 .get());
@@ -124,6 +120,7 @@ public class LocalInController implements Initializable {
                     .toList();
             navBar.getChildren().setAll(nodes);
         });
+        MFXLoaderBean view = loader.getView("12323");
         loader.start();
     }
 

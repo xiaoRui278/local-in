@@ -36,7 +36,7 @@ import java.util.*;
  * @date 2025/2/10
  * @desc
  */
-public class OnlineChatController implements Initializable, ConnectionListener, GroupMessageObserver {
+public class OnlineChatController implements Initializable, GroupMessageObserver {
     @FXML
     public MFXScrollPane chatUserScrollPane;
     @FXML
@@ -129,16 +129,6 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
                 }
             }
         });
-    }
-
-    @Override
-    public void onAdd(PeerId peerId, ConnectionCache connectionCache) {
-        //initUserList(connectionCache);
-    }
-
-    @Override
-    public void onRemove(PeerId peerId, ConnectionCache connectionCache) {
-        //initUserList(connectionCache);
     }
 
     @Override
