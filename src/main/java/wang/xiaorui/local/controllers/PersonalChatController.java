@@ -77,7 +77,7 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
     }
 
     @Override
-    public void onMessage(String message) {
+    public void onMessage(String fromUser, String message) {
         Platform.runLater(() -> {
             messageItemBox.getChildren().add(MessageBuilderHandler.handleOtherMessage(message));
         });

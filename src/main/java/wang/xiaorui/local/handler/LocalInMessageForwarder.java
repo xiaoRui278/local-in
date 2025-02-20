@@ -17,7 +17,7 @@ public class LocalInMessageForwarder {
     /**
      * 个人消息监听
      */
-    private static final Map<String, PersonalMessageObserver> personalObserverMap = new HashMap<>();
+    private static final Map<String, List<PersonalMessageObserver>> personalObserverMap = new HashMap<>();
 
     /**
      * 个人消息缓存
@@ -55,7 +55,7 @@ public class LocalInMessageForwarder {
      * @param messageObserver 监听器
      */
     public void addPersonalObserver(String userName, PersonalMessageObserver messageObserver) {
-        personalObserverMap.put(userName, messageObserver);
+        personalObserverMap.computeIfAbsent(userName, k -> new ArrayList<>()).add(messageObserver);
     }
 
     /**
@@ -94,9 +94,12 @@ public class LocalInMessageForwarder {
         }
         //个人消息
         message = message.substring(LocalInMessageConstants.PERSONAL_MESSAGE_PREFIX.length());
+        cachePersonalMessage(fromUser, message);
         if (personalObserverMap.containsKey(fromUser)) {
-            personalObserverMap.get(fromUser).onMessage(message);
-            cachePersonalMessage(fromUser, message);
+            List<PersonalMessageObserver> personalMessageObservers = personalObserverMap.get(fromUser);
+            for (PersonalMessageObserver personalMessageObserver : personalMessageObservers) {
+                personalMessageObserver.onMessage(fromUser, message);
+            }
         }
     }
 
@@ -117,8 +120,8 @@ public class LocalInMessageForwarder {
     /**
      * 发送消息
      *
-     * @param user 发送用户
-     * @param message  发送消息
+     * @param user    发送用户
+     * @param message 发送消息
      */
     public void sendPersonalMessage(LocalInUser user, String message) {
         String fromUser = user.getName();
@@ -165,7 +168,7 @@ public class LocalInMessageForwarder {
      * @param message   缓存消息
      */
     private void cacheGroupMessage(String cacheUser, String message) {
-        if(groupAllMessage.size() > 50){
+        if (groupAllMessage.size() > 50) {
             groupAllMessage.remove(0);
         }
         groupAllMessage.add(new MessageCache(cacheUser, message));
