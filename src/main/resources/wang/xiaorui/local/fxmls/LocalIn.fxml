@@ -18,7 +18,7 @@
         <MFXFontIcon fx:id="alwaysOnTopIcon" description="fas-circle" size="15.0" styleClass="always-on-top-icon"/>
         <MFXFontIcon fx:id="minimizeIcon" description="fas-circle" size="15.0" styleClass="minimize-icon"/>
         <MFXFontIcon fx:id="closeIcon" description="fas-circle" size="15.0" styleClass="close-icon"/>
-    </HBox >
+    </HBox>
     <!--导航栏-->
     <VBox prefWidth="250.0" styleClass="sidebar" AnchorPane.bottomAnchor="0.0"
           AnchorPane.leftAnchor="0.0" AnchorPane.topAnchor="0.0">
@@ -38,6 +38,15 @@
             <VBox fx:id="navBar" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="5.0"
                   styleClass="navbar"/>
         </MFXScrollPane>
+        <HBox spacing="5">
+            <Label text="version 1.0.0" style="-fx-text-fill: #ffffff; -fx-cursor: hand;" alignment="CENTER" minWidth="250"
+                   fx:id="githubLink"
+                   prefWidth="250" textAlignment="CENTER">
+                <graphic>
+                    <MFXFontIcon fx:id="githubIcon" size="20" color="white" style="-fx-text-fill: #ffffff;"/>
+                </graphic>
+            </Label>
+        </HBox>
     </VBox>
     <!--内容显示-->
     <StackPane fx:id="contentPane" layoutX="255.0" layoutY="32.0" styleClass="content-pane"
