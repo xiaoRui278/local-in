@@ -24,5 +24,11 @@ public abstract class P2PAbstractMessageHandler implements ProtocolMessageHandle
      *
      * @param message 消息
      */
-    public abstract void send(String message);
+    public abstract void sendMessage(String message);
+
+    /**
+     * 发送消息给群
+     * @param message 消息文本
+     */
+    public abstract void sendMessageToGroup(String message);
 }

@@ -1,24 +1,18 @@
 package wang.xiaorui.local.controllers;
 
 import io.github.palexdev.materialfx.controls.MFXButton;
-import io.github.palexdev.materialfx.controls.MFXIconWrapper;
-import io.github.palexdev.materialfx.controls.MFXRectangleToggleNode;
 import io.github.palexdev.materialfx.controls.MFXScrollPane;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
 import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
 import io.github.palexdev.materialfx.enums.ScrimPriority;
 import io.github.palexdev.materialfx.utils.ToggleButtonsUtil;
-import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
-import io.libp2p.core.PeerId;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.geometry.Pos;
 import javafx.scene.control.TextArea;
-import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -26,21 +20,20 @@ import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.handler.MessageBuilderHandler;
-import wang.xiaorui.local.server.ConnectionCache;
-import wang.xiaorui.local.server.ConnectionListener;
-import wang.xiaorui.local.server.LocalInMessageObserver;
-import wang.xiaorui.local.server.LocalInUser;
+import wang.xiaorui.local.handler.observer.GroupMessageObserver;
 
 import java.net.URL;
-import java.util.*;
+import java.util.Map;
+import java.util.ResourceBundle;
 
 /**
  * @author wangxiaorui
  * @date 2025/2/10
  * @desc
  */
-public class OnlineChatController implements Initializable, ConnectionListener, LocalInMessageObserver {
+public class OnlineChatController implements Initializable, GroupMessageObserver {
     @FXML
     public MFXScrollPane chatUserScrollPane;
     @FXML
@@ -57,7 +50,6 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
     @FXML
     public VBox messageItemBox;
 
-    private LocalInUser currentSelectUser;
     private Stage stage;
 
     private MFXStageDialog dialog;
@@ -91,11 +83,7 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
             return;
         }
         //此处发送的都是群发消息
-        Collection<LocalInUser> allPeers = ConnectionCache.getInstance().getAllPeers();
-        for (LocalInUser user : allPeers) {
-            String groupMessage = "/group" + text;
-            user.getController().send(groupMessage);
-        }
+        LocalInMessageForwarder.getInstance().sendGroupMessage("USER_SELF", text);
         chatInput.clear();
         messageItemBox.getChildren().add(MessageBuilderHandler.handleSelfMessage(text));
     }
@@ -137,52 +125,6 @@ public class OnlineChatController implements Initializable, ConnectionListener, 
                 }
             }
         });
-    }
-
-//    public void initUserList(ConnectionCache connectionCache) {
-//        Platform.runLater(() -> {
-//            chatUserListBox.getChildren().clear();
-//        });
-//        Collection<LocalInUser> allPeers = connectionCache.getAllPeers();
-//        List<ToggleButton> toggleButtons = new ArrayList<>();
-//        if (!allPeers.isEmpty()) {
-//            for (LocalInUser user : allPeers) {
-//                toggleButtons.add(createToggleAction(user));
-//            }
-//            Platform.runLater(() -> {
-//                chatUserListBox.getChildren().setAll(toggleButtons);
-//            });
-//        }
-//    }
-
-//    private ToggleButton createToggleAction(LocalInUser user) {
-//        List<String> hostAddress = user.getHostAddress();
-//        String clientIp = hostAddress.get(0);
-//        String clientName = "匿名用户" + clientIp.substring(clientIp.lastIndexOf("."));
-//        ToggleButton toggle = createToggle(clientName);
-//        toggle.setOnAction(actionEvent -> {
-//            currentSelectUser = user;
-//        });
-//        return toggle;
-//    }
-
-//    private ToggleButton createToggle(String text) {
-//        MFXIconWrapper wrapper = new MFXIconWrapper("fas-circle-user", 24, 32);
-//        MFXRectangleToggleNode toggleNode = new MFXRectangleToggleNode(text, wrapper);
-//        toggleNode.setAlignment(Pos.CENTER_LEFT);
-//        toggleNode.setMaxWidth(136);
-//        toggleNode.setToggleGroup(toggleGroup);
-//        return toggleNode;
-//    }
-
-    @Override
-    public void onAdd(PeerId peerId, ConnectionCache connectionCache) {
-        //initUserList(connectionCache);
-    }
-
-    @Override
-    public void onRemove(PeerId peerId, ConnectionCache connectionCache) {
-        //initUserList(connectionCache);
     }
 
     @Override

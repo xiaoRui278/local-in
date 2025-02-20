@@ -12,12 +12,15 @@ import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
-import javafx.scene.Parent;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.*;
+import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.server.ConnectionCache;
 
 import java.net.URL;
@@ -53,11 +56,8 @@ public class LocalInController implements Initializable {
     @FXML
     public StackPane contentPane;
 
-    private final ConnectionCache connectionCache;
-
     public LocalInController(Stage stage) {
         this.stage = stage;
-        this.connectionCache = ConnectionCache.getInstance();
         this.toggleGroup = new ToggleGroup();
         ToggleButtonsUtil.addAlwaysOneSelectedSupport(toggleGroup);
     }
@@ -94,7 +94,7 @@ public class LocalInController implements Initializable {
                     OnlineUserController onlineUserController = OnlineUserController.getInstance();
                     onlineUserController.setStage(stage);
                     onlineUserController.setRootPane(rootPane);
-                    connectionCache.addListener(onlineUserController);
+                    ConnectionCache.getInstance().addListener(onlineUserController);
                     return onlineUserController;
                 })
                 .setDefaultRoot(true).get());
@@ -103,7 +103,8 @@ public class LocalInController implements Initializable {
                 .setControllerFactory(c -> {
                     OnlineChatController onlineChatController = OnlineChatController.getInstance();
                     onlineChatController.setStage(stage);
-                    connectionCache.addListener(onlineChatController);
+                    //注册自己到群消息收发器
+                    LocalInMessageForwarder.getInstance().addMessageObserver(onlineChatController);
                     return onlineChatController;
                 })
                 .get());
@@ -134,6 +135,7 @@ public class LocalInController implements Initializable {
         toggleNode.setAlignment(Pos.CENTER_LEFT);
         toggleNode.setMaxWidth(Double.MAX_VALUE);
         toggleNode.setToggleGroup(toggleGroup);
+        toggleNode.setStyle("-fx-cursor: hand;");
         if (rotate != 0) wrapper.getIcon().setRotate(rotate);
         return toggleNode;
     }

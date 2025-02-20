@@ -1,7 +1,6 @@
 package wang.xiaorui.local.server;
 
 import io.libp2p.core.Stream;
-import wang.xiaorui.local.controllers.OnlineChatController;
 import wang.xiaorui.local.p2p.message.P2PAbstractMessageHandler;
 import wang.xiaorui.local.p2p.message.P2PMessageHandlerFactory;
 
@@ -30,8 +29,6 @@ public class LocalInP2PMessageHandlerFactory implements P2PMessageHandlerFactory
 
     @Override
     public P2PAbstractMessageHandler create(Stream stream) {
-        LocalInP2PMessageHandler localInP2PMessageHandler = new LocalInP2PMessageHandler(stream);
-        localInP2PMessageHandler.addMessageObserver(OnlineChatController.getInstance());
-        return localInP2PMessageHandler;
+        return new LocalInP2PMessageHandler(stream);
     }
 }

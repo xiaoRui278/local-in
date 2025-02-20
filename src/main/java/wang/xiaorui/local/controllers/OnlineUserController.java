@@ -1,27 +1,32 @@
 package wang.xiaorui.local.controllers;
 
-import io.github.palexdev.materialfx.controls.MFXButton;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
 import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
 import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
 import io.github.palexdev.materialfx.enums.ScrimPriority;
-import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
+import io.github.palexdev.materialfx.utils.AnimationUtils;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
 import io.libp2p.core.PeerId;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Parent;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.*;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 import wang.xiaorui.local.MFXDemoResourcesLoader;
-import wang.xiaorui.local.handler.PersonalMessageHandler;
+import wang.xiaorui.local.constants.Constants;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
+import wang.xiaorui.local.handler.observer.PersonalMessageObserver;
 import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.ConnectionListener;
 import wang.xiaorui.local.server.LocalInUser;
@@ -35,7 +40,7 @@ import java.util.*;
  * @date 2025/2/8
  * @desc
  */
-public class OnlineUserController implements Initializable, ConnectionListener {
+public class OnlineUserController implements Initializable, ConnectionListener, PersonalMessageObserver {
 
     @FXML
     public VBox userListVBoxNode;
@@ -87,6 +92,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
             for (LocalInUser user : allPeers) {
                 //正则获取IP地址
                 allUserHbox.add(buildUserItem(user));
+                LocalInMessageForwarder.getInstance().addPersonalObserver(user.getName(), this);
             }
             Platform.runLater(() -> {
                 userListVBoxNode.getChildren().setAll(allUserHbox);
@@ -104,6 +110,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         List<String> hostAddress = user.getHostAddress();
         String clientIp = hostAddress.get(0);
         HBox userItem = new HBox();
+        userItem.setId(Constants.USER_ITEM_HBOX_PREFIX + user.getName());
         userItem.getStyleClass().add("user-item-hbox");
         userItem.setPadding(new Insets(0, 20, 0, 20));
         userItem.setAlignment(Pos.CENTER);
@@ -128,6 +135,7 @@ public class OnlineUserController implements Initializable, ConnectionListener {
         userInfoVBox.getChildren().setAll(nameLabel, ipLabel);
 
         MFXFontIcon chatIcon = new MFXFontIcon("fas-comment-dots", 30);
+        chatIcon.setId(Constants.USER_CHAT_ICON_PREFIX + user.getName());
         chatIcon.getStyleClass().add("user-icon");
         chatIcon.setOnMouseClicked(event -> {
             //此处直接打开一个弹框吧
@@ -140,19 +148,20 @@ public class OnlineUserController implements Initializable, ConnectionListener {
     }
 
     public void openChatWindow(LocalInUser user) {
-//    public void openChatWindow(ActionEvent event) {
         //构建Dialog内容
         FXMLLoader loader = new FXMLLoader(MFXDemoResourcesLoader.loadURL("fxmls/PersonalChat.fxml"));
         loader.setControllerFactory(c -> {
             PersonalChatController personalChatController = new PersonalChatController(user);
-            PersonalMessageHandler.getInstance().addMessageObserver(user.getName(), personalChatController);
+            LocalInMessageForwarder.getInstance().addPersonalObserver(user.getName(), personalChatController);
             return personalChatController;
         });
         MFXGenericDialog mfxGenericDialog = null;
         try {
+            MFXFontIcon warnIcon = new MFXFontIcon("fas-handshake-simple", 18);
             mfxGenericDialog = MFXGenericDialogBuilder.build()
                     .setContent(loader.load())
-//                        .makeScrollable(true)
+                    .setHeaderIcon(warnIcon)
+                    .setHeaderText("与[" + user.getHostAddress().get(0) + "]的聊天")
                     .get();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -165,13 +174,12 @@ public class OnlineUserController implements Initializable, ConnectionListener {
                 .initOwner(stage)
                 .initModality(Modality.APPLICATION_MODAL)
                 .setDraggable(false)
-                .setTitle("与[" + user.getHostAddress().get(0) + "]聊天")
                 .setOwnerNode(rootPane)
                 .setScrimPriority(ScrimPriority.WINDOW)
                 .setScrimOwner(true)
                 .get();
-        mfxGenericDialog.setMaxSize(800, 600);
-        mfxGenericDialog.setPrefHeight(600);
+//        mfxGenericDialog.setMaxSize(800, 600);
+//        mfxGenericDialog.setPrefHeight(600);
         dialog.setHeight(600);
         dialog.setWidth(800);
         Platform.runLater(dialog::showDialog);
@@ -186,5 +194,63 @@ public class OnlineUserController implements Initializable, ConnectionListener {
     @Override
     public void onRemove(PeerId peerId, ConnectionCache connectionCache) {
         initUserList(connectionCache);
+    }
+
+    private static final Set<String> flashing = new HashSet<>();
+
+    @Override
+    public void onMessage(String fromUser, String message) {
+        //收到消息刷新页面样式，让用户知道收到了消息
+        userListVBoxNode.getChildren().forEach(hBox -> {
+            if (hBox instanceof HBox currentNode && hBox.getId().equals(Constants.USER_ITEM_HBOX_PREFIX + fromUser) && !flashing.contains(fromUser)) {
+                //图标
+                MFXFontIcon iconNode = currentNode.getChildren().stream()
+                        .filter(node -> node instanceof MFXFontIcon && node.getId() != null && node.getId().equals(Constants.USER_CHAT_ICON_PREFIX + fromUser))
+                        .map(x -> (MFXFontIcon) x).findFirst().orElse(null);
+                if (null == iconNode) {
+                    return;
+                }
+                flashing.add(fromUser);
+                Timeline timelineAnimation = getTimelineAnimation(currentNode, iconNode);
+                Platform.runLater(() -> {
+                    // 启动动画
+                    timelineAnimation.play();
+                    PauseTransition pause = new PauseTransition(Duration.seconds(5));
+                    pause.setOnFinished(event -> {
+                        timelineAnimation.stop();
+                        flashing.remove(fromUser);
+                        currentNode.setStyle("-fx-background-color: -mfx-blue-secondary;");
+                        iconNode.setStyle("-mfx-color: -mfx-info;");
+                    });
+                    pause.play();
+                });
+            }
+        });
+
+    }
+
+    /**
+     * 获取动画
+     *
+     * @return
+     */
+    private Timeline getTimelineAnimation(HBox hBox, MFXFontIcon icon) {
+        AnimationUtils.TimelineBuilder timelineBuilder = AnimationUtils.TimelineBuilder.build()
+                .add(
+                        AnimationUtils.KeyFrames.of(Duration.ZERO, hBox.styleProperty(), "-fx-background-color: " +
+                                "-mfx-blue-secondary;"),
+                        AnimationUtils.KeyFrames.of(Duration.ZERO, icon.styleProperty(), "-mfx-color: -mfx-info;"),
+
+                        AnimationUtils.KeyFrames.of(Duration.millis(500), hBox.styleProperty(), "-fx-background-color" +
+                                ": -mfx-blue-light;"),
+                        AnimationUtils.KeyFrames.of(Duration.millis(500), icon.styleProperty(), "-mfx-color: " +
+                                "-mfx-success;"),
+
+                        AnimationUtils.KeyFrames.of(Duration.millis(1000), hBox.styleProperty(), "-fx-background" +
+                                "-color: -mfx-blue-secondary;"),
+                        AnimationUtils.KeyFrames.of(Duration.millis(1000), icon.styleProperty(), "-mfx-color: " +
+                                "-mfx-info;")
+                ).setCycleCount(Timeline.INDEFINITE);
+        return timelineBuilder.getAnimation();
     }
 }

@@ -23,6 +23,7 @@
 
 .online-user-pane .user-item-hbox .user-icon{
     -mfx-color: -mfx-info;
+    -fx-cursor: hand;
 }
 
 .online-user-pane .user-item-hbox .user-name-label{

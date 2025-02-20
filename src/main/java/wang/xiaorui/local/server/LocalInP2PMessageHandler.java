@@ -3,12 +3,11 @@ package wang.xiaorui.local.server;
 import io.libp2p.core.Stream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import wang.xiaorui.local.handler.PersonalMessageHandler;
+import wang.xiaorui.local.handler.LocalInMessageConstants;
+import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.p2p.message.P2PAbstractMessageHandler;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @author wangxiaorui
@@ -17,15 +16,10 @@ import java.util.List;
  */
 public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
     private final ConnectionCache connectionCache;
-    private List<LocalInMessageObserver> messageObservers = new ArrayList<>();
 
     public LocalInP2PMessageHandler(Stream stream) {
         super(stream);
         this.connectionCache = ConnectionCache.getInstance();
-    }
-
-    public void addMessageObserver(LocalInMessageObserver messageObservers) {
-        this.messageObservers.add(messageObservers);
     }
 
     @Override
@@ -48,27 +42,22 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
         if (null == message || message.isEmpty()) {
             return;
         }
-        if (message.startsWith("/group")) {
-            //群发消息
-            //去掉群发消息前缀
-            message = message.substring("/group".length());
-            //渲染消息
-            for (LocalInMessageObserver messageObserver : messageObservers) {
-                messageObserver.onMessage(message);
-            }
-            return;
-        }
-        if(message.startsWith("/personal")){
-            message = message.substring("/personal".length());
-            int splitIndex = message.indexOf("/");
-            String toUser = message.substring(0, splitIndex + 1);
-            String text = message.substring(splitIndex + 1);
-            PersonalMessageHandler.getInstance().onMessage(fromUser, text);
-        }
+        LocalInMessageForwarder.getInstance().onMessage(fromUser, message);
     }
 
     @Override
-    public void send(String message) {
+    public void sendMessage(String message) {
+        String newMessage = LocalInMessageConstants.PERSONAL_MESSAGE_PREFIX + message;
+        send(newMessage);
+    }
+
+    @Override
+    public void sendMessageToGroup(String message) {
+        String newMessage = LocalInMessageConstants.GROUP_MESSAGE_PREFIX + message;
+        send(newMessage);
+    }
+
+    private void send(String message) {
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
         ByteBuf messageBuf = Unpooled.wrappedBuffer(bytes);// Unpooled.copiedBuffer(message, StandardCharsets.UTF_8);
         stream.writeAndFlush(messageBuf);

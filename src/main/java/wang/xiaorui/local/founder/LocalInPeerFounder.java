@@ -43,7 +43,7 @@ public class LocalInPeerFounder implements P2PPeerFounder {
             return;
         }
         //首次连接成功之后询问对方身份
-        connection.getValue().send("/local-in-who");
+        //connection.getValue().sendMessage("/local-in-who");
         connectionCache.addPeer(peerInfo.getPeerId(), new LocalInUser(peerInfo.getPeerId().toBase58(),
                 connection.getValue(), hostAddress));
     }
