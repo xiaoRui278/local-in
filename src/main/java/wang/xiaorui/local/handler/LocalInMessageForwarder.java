@@ -1,5 +1,7 @@
 package wang.xiaorui.local.handler;
 
+import io.libp2p.core.PeerId;
+import wang.xiaorui.local.handler.observer.FileMessageObserver;
 import wang.xiaorui.local.handler.observer.GroupMessageObserver;
 import wang.xiaorui.local.handler.observer.PersonalMessageObserver;
 import wang.xiaorui.local.server.ConnectionCache;
@@ -29,6 +31,7 @@ public class LocalInMessageForwarder {
      * 群聊消息监听
      */
     private static final List<GroupMessageObserver> groupObserverMap = new ArrayList<>();
+    private static final List<FileMessageObserver> FileObserverMap = new ArrayList<>();
 
     private static final List<MessageCache> groupAllMessage = new ArrayList<>();
 
@@ -68,6 +71,15 @@ public class LocalInMessageForwarder {
     }
 
     /**
+     * 添加文件消息监听器
+     *
+     * @param messageObserver 监听器
+     */
+    public void addFileObserver(FileMessageObserver messageObserver) {
+        FileObserverMap.add(messageObserver);
+    }
+
+    /**
      * 查询用户缓存消息
      *
      * @param userName 用户name
@@ -80,10 +92,11 @@ public class LocalInMessageForwarder {
     /**
      * 收到消息
      *
-     * @param fromUser 发送用户
+     * @param peerId 发送用户
      * @param message  发送消息
      */
-    public void onMessage(String fromUser, String message) {
+    public void onMessage(PeerId peerId, String message) {
+        String fromUser = peerId.toBase58();
         if (message.startsWith(LocalInMessageConstants.FILE_META_PREFIX)) {
             //文件元数据
             //去掉文件元数据前缀
@@ -94,11 +107,8 @@ public class LocalInMessageForwarder {
             //渲染消息
             String newMessage = "文件[" + fileName + "(" + fileSize + ")]";
             cachePersonalMessage(fromUser, newMessage);
-            if (personalObserverMap.containsKey(fromUser)) {
-                List<PersonalMessageObserver> personalMessageObservers = personalObserverMap.get(fromUser);
-                for (PersonalMessageObserver personalMessageObserver : personalMessageObservers) {
-                    personalMessageObserver.onAcceptFileMetaMessage(fromUser, fileName, fileSize);
-                }
+            for (FileMessageObserver fileMessageObserver : FileObserverMap) {
+                fileMessageObserver.onAcceptFileMetaMessage(peerId, fileName, fileSize);
             }
             return;
         }

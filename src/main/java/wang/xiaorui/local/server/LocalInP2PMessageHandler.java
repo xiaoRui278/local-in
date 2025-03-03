@@ -1,5 +1,6 @@
 package wang.xiaorui.local.server;
 
+import io.libp2p.core.PeerId;
 import io.libp2p.core.Stream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -36,12 +37,12 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
 
     @Override
     public void onMessage(Stream stream, ByteBuf msg) {
-        String fromUser = stream.remotePeerId().toBase58();
+        PeerId peerId = stream.remotePeerId();
         String message = msg.toString(StandardCharsets.UTF_8);
         if (null == message || message.isEmpty()) {
             return;
         }
-        LocalInMessageForwarder.getInstance().onMessage(fromUser, message);
+        LocalInMessageForwarder.getInstance().onMessage(peerId, message);
     }
 
     @Override

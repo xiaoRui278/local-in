@@ -231,11 +231,6 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
 
     }
 
-    @Override
-    public void onAcceptFileMetaMessage(String fromUser, String fileName, String fileSize) {
-
-    }
-
     /**
      * 获取动画
      *

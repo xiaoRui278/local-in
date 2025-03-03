@@ -1,29 +1,35 @@
 package wang.xiaorui.local.controllers;
 
-import io.github.palexdev.materialfx.controls.MFXIconWrapper;
-import io.github.palexdev.materialfx.controls.MFXRectangleToggleNode;
-import io.github.palexdev.materialfx.controls.MFXScrollPane;
+import io.github.palexdev.materialfx.controls.*;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialog;
+import io.github.palexdev.materialfx.dialogs.MFXGenericDialogBuilder;
+import io.github.palexdev.materialfx.dialogs.MFXStageDialog;
+import io.github.palexdev.materialfx.enums.ButtonType;
+import io.github.palexdev.materialfx.enums.ScrimPriority;
 import io.github.palexdev.materialfx.utils.ToggleButtonsUtil;
 import io.github.palexdev.materialfx.utils.others.loader.MFXLoader;
 import io.github.palexdev.materialfx.utils.others.loader.MFXLoaderBean;
 import io.github.palexdev.mfxresources.fonts.IconsProviders;
 import io.github.palexdev.mfxresources.fonts.MFXFontIcon;
+import io.libp2p.core.PeerId;
 import javafx.application.Platform;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import wang.xiaorui.local.handler.LocalInMessageForwarder;
+import wang.xiaorui.local.handler.observer.FileMessageObserver;
+import wang.xiaorui.local.p2p.model.P2PUser;
 import wang.xiaorui.local.server.ConnectionCache;
+import wang.xiaorui.local.server.LocalInUser;
 
 import java.awt.*;
 import java.io.IOException;
@@ -31,6 +37,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
+import java.util.Map;
 import java.util.ResourceBundle;
 
 import static wang.xiaorui.local.MFXDemoResourcesLoader.loadURL;
@@ -40,7 +47,7 @@ import static wang.xiaorui.local.MFXDemoResourcesLoader.loadURL;
  * @date 2025/2/8
  * @desc
  */
-public class LocalInController implements Initializable {
+public class LocalInController implements Initializable, FileMessageObserver {
     private final Stage stage;
     @FXML
     public MFXFontIcon githubIcon;
@@ -164,5 +171,94 @@ public class LocalInController implements Initializable {
         toggleNode.setStyle("-fx-cursor: hand;");
         if (rotate != 0) wrapper.getIcon().setRotate(rotate);
         return toggleNode;
+    }
+
+    /**
+     * 已选文件显示容器
+     */
+    private VBox acceptFileBox;
+
+    @Override
+    public void onAcceptFileMetaMessage(PeerId peerId, String fileName, String fileSize) {
+        LocalInUser user = (LocalInUser)ConnectionCache.getInstance().getPeer(peerId);
+        if(null == user){
+            return;
+        }
+        Platform.runLater(() -> {
+            // 弹出文件接收对话框
+            MFXGenericDialog mfxGenericDialog = null;
+            try {
+                // 创建内容容器
+                VBox contentContainer = new VBox(15);
+                contentContainer.setPadding(new Insets(20));
+                contentContainer.setAlignment(Pos.TOP_CENTER);
+
+                acceptFileBox = new VBox();
+                HBox fileItemHbox = new HBox();
+                fileItemHbox.setAlignment(Pos.BASELINE_LEFT);
+                fileItemHbox.setSpacing(20);
+                javafx.scene.control.Label fileNameLabel =
+                        new javafx.scene.control.Label(fileName + "(" + fileSize + ")");
+                MFXProgressBar mfxProgressBar = new MFXProgressBar();
+                mfxProgressBar.setProgress(0.4);
+                mfxProgressBar.setPrefWidth(400);
+                fileItemHbox.getChildren().addAll(fileNameLabel, mfxProgressBar);
+                HBox.setHgrow(mfxProgressBar, Priority.ALWAYS);
+                acceptFileBox.getChildren().add(fileItemHbox);
+                // 组装内容
+                contentContainer.getChildren().addAll(
+                        acceptFileBox
+                );
+
+                MFXFontIcon warnIcon = new MFXFontIcon("fas-file-export", 18);
+                mfxGenericDialog = MFXGenericDialogBuilder.build()
+                        //.setContentText("文件发送对话框")
+                        .setContent(contentContainer)
+                        .setHeaderIcon(warnIcon)
+                        .setHeaderText("收到[" + user.getHostAddress().get(0) + "]发送的文件")
+                        .get();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            //构建dialog
+            MFXStageDialog dialog = MFXGenericDialogBuilder.build(mfxGenericDialog)
+                    .setShowMinimize(false)
+                    .setShowAlwaysOnTop(false)
+                    .setShowClose(false)
+                    .toStageDialogBuilder()
+                    .initOwner(stage)
+                    .initModality(Modality.APPLICATION_MODAL)
+                    .setDraggable(false)
+                    .setOwnerNode(rootPane)
+                    .setScrimPriority(ScrimPriority.NODE)
+                    .setScrimOwner(true)
+                    .setScrimStrength(0.5)
+                    .get();
+
+            //接收按钮
+            MFXButton sendButton = new MFXButton("接收");
+            sendButton.setButtonType(ButtonType.RAISED);
+            sendButton.setStyle("-fx-background-color:#79BBFF; -fx-text-fill: #FFFFFF; -fx-cursor: hand; -fx-padding:" +
+                    " 6 " +
+                    "22;");
+
+            //取消按钮
+            MFXButton cancelButton = new MFXButton("取消");
+            cancelButton.setButtonType(ButtonType.RAISED);
+            cancelButton.setStyle("-fx-background-color:#CDD0D6; -fx-cursor: hand; -fx-padding: 6 22;");
+            mfxGenericDialog.addActions(
+                    Map.entry(sendButton, e -> {
+                        System.out.println("=====>> 接收文件");
+                    }),
+                    Map.entry(cancelButton, e -> {
+                        dialog.close();
+                        System.out.println("=====>> 取消");
+                    })
+            );
+
+            dialog.setHeight(240);
+            dialog.setWidth(600);
+            dialog.showDialog();
+        });
     }
 }
