@@ -84,6 +84,24 @@ public class LocalInMessageForwarder {
      * @param message  发送消息
      */
     public void onMessage(String fromUser, String message) {
+        if (message.startsWith(LocalInMessageConstants.FILE_META_PREFIX)) {
+            //文件元数据
+            //去掉文件元数据前缀
+            message = message.substring(LocalInMessageConstants.FILE_META_PREFIX.length());
+            String[] split = message.split(LocalInMessageConstants.FILE_META_SPLIT);
+            String fileName = split[0];
+            String fileSize = split[1];
+            //渲染消息
+            String newMessage = "文件[" + fileName + "(" + fileSize + ")]";
+            cachePersonalMessage(fromUser, newMessage);
+            if (personalObserverMap.containsKey(fromUser)) {
+                List<PersonalMessageObserver> personalMessageObservers = personalObserverMap.get(fromUser);
+                for (PersonalMessageObserver personalMessageObserver : personalMessageObservers) {
+                    personalMessageObserver.onAcceptFileMetaMessage(fromUser, fileName, fileSize);
+                }
+            }
+            return;
+        }
         if (message.startsWith(LocalInMessageConstants.GROUP_MESSAGE_PREFIX)) {
             //群发消息
             //去掉群发消息前缀
@@ -125,7 +143,8 @@ public class LocalInMessageForwarder {
      */
     public void sendPersonalMessage(LocalInUser user, String message) {
         String fromUser = user.getName();
-        user.getController().sendMessage(message);
+        String newMessage = LocalInMessageConstants.PERSONAL_MESSAGE_PREFIX + message;
+        user.getController().sendMessage(newMessage);
         cachePersonalMessage(fromUser, message);
     }
 
@@ -137,10 +156,23 @@ public class LocalInMessageForwarder {
      */
     public void sendGroupMessage(String fromUser, String message) {
         Collection<LocalInUser> allPeers = ConnectionCache.getInstance().getAllPeers();
+        String newMessage = LocalInMessageConstants.GROUP_MESSAGE_PREFIX + message;
         for (LocalInUser user : allPeers) {
-            user.getController().sendMessageToGroup(message);
+            user.getController().sendMessage(newMessage);
         }
         cacheGroupMessage(fromUser, message);
+    }
+
+    /**
+     * 发送文件元数据信息
+     * @param user 用户
+     * @param fileName 文件名
+     * @param fileSize 文件大小
+     */
+    public void sendFileMetaMessage(LocalInUser user, String fileName, String fileSize) {
+        String message = LocalInMessageConstants.FILE_META_PREFIX + fileName + LocalInMessageConstants.FILE_META_SPLIT + fileSize;
+        user.getController().sendMessage(message);
+        cachePersonalMessage(user.getName(), "文件["+fileName+"("+fileSize+")]");
     }
 
     /**

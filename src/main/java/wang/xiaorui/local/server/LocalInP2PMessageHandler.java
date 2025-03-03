@@ -3,7 +3,6 @@ package wang.xiaorui.local.server;
 import io.libp2p.core.Stream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import wang.xiaorui.local.handler.LocalInMessageConstants;
 import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.p2p.message.P2PAbstractMessageHandler;
 
@@ -47,14 +46,7 @@ public class LocalInP2PMessageHandler extends P2PAbstractMessageHandler {
 
     @Override
     public void sendMessage(String message) {
-        String newMessage = LocalInMessageConstants.PERSONAL_MESSAGE_PREFIX + message;
-        send(newMessage);
-    }
-
-    @Override
-    public void sendMessageToGroup(String message) {
-        String newMessage = LocalInMessageConstants.GROUP_MESSAGE_PREFIX + message;
-        send(newMessage);
+        send(message);
     }
 
     private void send(String message) {

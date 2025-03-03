@@ -15,4 +15,11 @@ public class LocalInMessageConstants {
      * 个人消息前缀
      */
     public static final String PERSONAL_MESSAGE_PREFIX = "/LOCAL_PERSONAL";
+
+    /**
+     * 文件Meta消息前缀
+     */
+    public static final String FILE_META_PREFIX = "/LOCAL_FILE_META";
+
+    public static final String FILE_META_SPLIT = "&";
 }
