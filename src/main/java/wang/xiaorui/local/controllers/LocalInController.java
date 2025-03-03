@@ -27,7 +27,6 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import wang.xiaorui.local.handler.LocalInMessageForwarder;
 import wang.xiaorui.local.handler.observer.FileMessageObserver;
-import wang.xiaorui.local.p2p.model.P2PUser;
 import wang.xiaorui.local.server.ConnectionCache;
 import wang.xiaorui.local.server.LocalInUser;
 
