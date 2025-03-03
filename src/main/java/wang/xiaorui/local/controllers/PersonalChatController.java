@@ -34,6 +34,7 @@ import wang.xiaorui.local.server.LocalInUser;
 import java.awt.*;
 import java.io.File;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -107,6 +108,13 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
         });
     }
 
+    private List<File> files = new ArrayList<>();
+
+    /**
+     * 已选文件显示容器
+     */
+    private VBox selectedFileBox;
+
     /**
      * 打开发送文件对话框发送文件
      *
@@ -122,36 +130,28 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
 
             // 创建内容按钮
             MFXButton selectFileBtn = new MFXButton("选择文件");
+            MFXFontIcon mfxFontIcon = new MFXFontIcon("fas-file-circle-plus", 16);
+            mfxFontIcon.setStyle("-mfx-color: white;");
+            selectFileBtn.setGraphic(mfxFontIcon);
             selectFileBtn.setPrefSize(120, 40);
             selectFileBtn.setButtonType(ButtonType.RAISED);
-            selectFileBtn.setStyle("-fx-background-color: #409EFF; -fx-text-fill: white;");
-
-            VBox fileBox = new VBox();
+            selectFileBtn.setStyle("-fx-background-color: #409EFF; -fx-text-fill: white; -fx-cursor: hand;");
+            selectedFileBox = new VBox();
             // 按钮点击事件
             selectFileBtn.setOnAction(e -> {
-                fileBox.getChildren().clear();
+                files.clear();
                 FileChooser fileChooser = new FileChooser();
                 File file = fileChooser.showOpenDialog(stage);
                 if (file != null) {
-                    String name = file.getName();
-                    //已选择文件
-                    HBox fileItemHbox = new HBox();
-                    fileItemHbox.setAlignment(Pos.BASELINE_LEFT);
-                    fileItemHbox.setSpacing(20);
-                    javafx.scene.control.Label fileNameLabel = new javafx.scene.control.Label(name);
-                    MFXProgressBar mfxProgressBar = new MFXProgressBar();
-                    mfxProgressBar.setProgress(0.4);
-                    mfxProgressBar.setPrefWidth(400);
-                    fileItemHbox.getChildren().addAll(fileNameLabel, mfxProgressBar);
-                    HBox.setHgrow(mfxProgressBar, Priority.ALWAYS);
-                    fileBox.getChildren().add(fileItemHbox);
+                    files.add(file);
+                    renderFileList();
                 }
             });
 
             // 组装内容
             contentContainer.getChildren().addAll(
                     selectFileBtn,
-                    fileBox
+                    selectedFileBox
             );
 
             MFXFontIcon warnIcon = new MFXFontIcon("fas-file-export", 18);
@@ -182,14 +182,18 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
         //发送按钮
         MFXButton sendButton = new MFXButton("发送");
         sendButton.setButtonType(ButtonType.RAISED);
-        sendButton.setStyle("-fx-background-color:#79BBFF; -fx-text-fill: #FFFFFF;");
+        sendButton.setStyle("-fx-background-color:#79BBFF; -fx-text-fill: #FFFFFF; -fx-cursor: hand; -fx-padding: 6 22;");
 
         //取消按钮
         MFXButton cancelButton = new MFXButton("取消");
         cancelButton.setButtonType(ButtonType.RAISED);
-        cancelButton.setStyle("-fx-background-color:#CDD0D6;");
+        cancelButton.setStyle("-fx-background-color:#CDD0D6; -fx-cursor: hand; -fx-padding: 6 22;");
         mfxGenericDialog.addActions(
                 Map.entry(sendButton, e -> {
+                    if(files.isEmpty()){
+                        return;
+                    }
+                    //发送文件
                 }),
                 Map.entry(cancelButton, e -> dialog.close())
         );
@@ -197,5 +201,31 @@ public class PersonalChatController implements Initializable, PersonalMessageObs
         dialog.setHeight(240);
         dialog.setWidth(600);
         Platform.runLater(dialog::showDialog);
+    }
+
+    /**
+     * 渲染文件列表界面
+     */
+    private void renderFileList(){
+        selectedFileBox.getChildren().clear();
+        if(files.isEmpty()){
+            return;
+        }
+        List<HBox> allSelectedFile = new ArrayList<>();
+        for (File file : files) {
+            String name = file.getName();
+            //已选择文件
+            HBox fileItemHbox = new HBox();
+            fileItemHbox.setAlignment(Pos.BASELINE_LEFT);
+            fileItemHbox.setSpacing(20);
+            javafx.scene.control.Label fileNameLabel = new javafx.scene.control.Label(name);
+            MFXProgressBar mfxProgressBar = new MFXProgressBar();
+            mfxProgressBar.setProgress(0.4);
+            mfxProgressBar.setPrefWidth(400);
+            fileItemHbox.getChildren().addAll(fileNameLabel, mfxProgressBar);
+            HBox.setHgrow(mfxProgressBar, Priority.ALWAYS);
+            allSelectedFile.add(fileItemHbox);
+        }
+        selectedFileBox.getChildren().addAll(allSelectedFile);
     }
 }
