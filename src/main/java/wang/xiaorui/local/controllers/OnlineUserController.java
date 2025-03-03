@@ -153,6 +153,7 @@ public class OnlineUserController implements Initializable, ConnectionListener, 
         FXMLLoader loader = new FXMLLoader(MFXDemoResourcesLoader.loadURL("fxmls/PersonalChat.fxml"));
         loader.setControllerFactory(c -> {
             PersonalChatController personalChatController = new PersonalChatController(user);
+            personalChatController.setStage(stage);
             LocalInMessageForwarder.getInstance().addPersonalObserver(user.getName(), personalChatController);
             return personalChatController;
         });

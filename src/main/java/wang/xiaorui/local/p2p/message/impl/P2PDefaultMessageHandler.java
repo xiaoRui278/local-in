@@ -40,11 +40,6 @@ public class P2PDefaultMessageHandler extends P2PAbstractMessageHandler {
 
     }
 
-    @Override
-    public void sendMessageToGroup(String message) {
-
-    }
-
     public void send(String message) {
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
         ByteBuf messageBuf = Unpooled.wrappedBuffer(bytes);// Unpooled.copiedBuffer(message, StandardCharsets.UTF_8);
