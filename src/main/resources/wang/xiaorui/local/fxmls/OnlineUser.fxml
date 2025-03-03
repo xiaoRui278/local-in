@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Button?>
 <AnchorPane styleClass="online-user-pane" stylesheets="@../css/OnlineUser.css" xmlns="http://javafx.com/javafx/17"
             fx:id="onlineUserPane"
             xmlns:fx="http://javafx.com/fxml/1" fx:controller="wang.xiaorui.local.controllers.OnlineUserController">
@@ -16,6 +17,7 @@
                 <Insets bottom="10"/>
             </VBox.margin>
         </Label>
+        <Button text="测试按钮" onAction="#openTest" />
         <!--一行是一个用户-->
         <VBox fx:id="userListVBoxNode" spacing="10">
         </VBox>

@@ -43,3 +43,8 @@
     -fx-background-color: -mfx-blue-main;
     -fx-text-fill: white
 }
+
+.personal-chat-pane .sendFileBtn {
+    -fx-background-color: -mfx-warning;
+    -fx-text-fill: white
+}

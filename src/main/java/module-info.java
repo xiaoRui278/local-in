@@ -1,5 +1,4 @@
-module wang.xiaorui.local.localin {
-    requires javax.jmdns;
+module wang.xiaorui.local {
     requires fr.brouillard.oss.cssfx;
     requires MaterialFX;
     requires jvm.libp2p;

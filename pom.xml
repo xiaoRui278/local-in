@@ -52,17 +52,17 @@
             <scope>test</scope>
         </dependency>
         <!-- 添加网络发现库 -->
-        <dependency>
-            <groupId>org.jmdns</groupId>
-            <artifactId>jmdns</artifactId>
-            <version>3.6.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.jmdns</groupId>-->
+<!--            <artifactId>jmdns</artifactId>-->
+<!--            <version>3.6.0</version>-->
+<!--        </dependency>-->
         <!-- 添加文件传输库 -->
-        <dependency>
-            <groupId>commons-net</groupId>
-            <artifactId>commons-net</artifactId>
-            <version>3.8.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>commons-net</groupId>-->
+<!--            <artifactId>commons-net</artifactId>-->
+<!--            <version>3.8.0</version>-->
+<!--        </dependency>-->
 
         <!--P2P通信-->
         <dependency>
