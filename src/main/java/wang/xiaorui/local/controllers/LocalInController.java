@@ -198,11 +198,13 @@ public class LocalInController implements Initializable, FileMessageObserver {
                 fileItemHbox.setAlignment(Pos.BASELINE_LEFT);
                 fileItemHbox.setSpacing(20);
                 javafx.scene.control.Label fileNameLabel =
-                        new javafx.scene.control.Label(fileName + "(" + fileSize + ")");
+                        new javafx.scene.control.Label(fileName);
                 MFXProgressBar mfxProgressBar = new MFXProgressBar();
                 mfxProgressBar.setProgress(0.4);
                 mfxProgressBar.setPrefWidth(400);
-                fileItemHbox.getChildren().addAll(fileNameLabel, mfxProgressBar);
+                javafx.scene.control.Label fileSizeLabel =
+                        new javafx.scene.control.Label(fileSize);
+                fileItemHbox.getChildren().addAll(fileNameLabel, mfxProgressBar, fileSizeLabel);
                 HBox.setHgrow(mfxProgressBar, Priority.ALWAYS);
                 acceptFileBox.getChildren().add(fileItemHbox);
                 // 组装内容
