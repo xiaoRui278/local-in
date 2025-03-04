@@ -76,6 +76,7 @@ public class LocalInController implements Initializable, FileMessageObserver {
         this.stage = stage;
         this.toggleGroup = new ToggleGroup();
         ToggleButtonsUtil.addAlwaysOneSelectedSupport(toggleGroup);
+        LocalInMessageForwarder.getInstance().addFileObserver(this);
     }
 
     @Override
@@ -242,7 +243,7 @@ public class LocalInController implements Initializable, FileMessageObserver {
                     "22;");
 
             //取消按钮
-            MFXButton cancelButton = new MFXButton("取消");
+            MFXButton cancelButton = new MFXButton("拒绝");
             cancelButton.setButtonType(ButtonType.RAISED);
             cancelButton.setStyle("-fx-background-color:#CDD0D6; -fx-cursor: hand; -fx-padding: 6 22;");
             mfxGenericDialog.addActions(
