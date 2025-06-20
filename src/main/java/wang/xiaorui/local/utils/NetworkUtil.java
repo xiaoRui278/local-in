@@ -65,6 +65,10 @@ public class NetworkUtil {
         Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
         while (networkInterfaces.hasMoreElements()) {
             NetworkInterface ni = networkInterfaces.nextElement();
+            if(ni.isLoopback() || !ni.isUp()){
+                //避免获取到loopback地址127.0.0.1
+                continue;
+            }
             Enumeration<InetAddress> inetAddresses = ni.getInetAddresses();
             while (inetAddresses.hasMoreElements()) {
                 InetAddress ia = inetAddresses.nextElement();

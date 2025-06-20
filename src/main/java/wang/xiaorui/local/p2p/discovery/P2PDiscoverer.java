@@ -52,7 +52,7 @@ public class P2PDiscoverer {
         //注册本机服务
         jmDNS.registerService(serviceInfo());
         //添加监听
-        jmDNS.addAnswerListener(Constants.SERVICE_TYPE, 1000, answerListener);
+        jmDNS.addAnswerListener(Constants.SERVICE_TYPE, 3000, answerListener);
         jmDNS.start();
         System.out.println("P2P Discoverer started");
     }
