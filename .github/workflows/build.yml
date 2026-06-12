@@ -86,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-macOS-AppleSilicon
-          path: src-tauri/target/**/*.dmg
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
           if-no-files-found: warn
 
       - name: Upload macOS x86_64 artifacts
@@ -94,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-macOS-Intel
-          path: src-tauri/target/**/*.dmg
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/
           if-no-files-found: warn
 
       - name: Upload Linux artifacts
@@ -103,6 +103,6 @@ jobs:
         with:
           name: Local-In-Linux
           path: |
-            src-tauri/target/**/*.deb
-            src-tauri/target/**/*.AppImage
+            src-tauri/target/release/bundle/deb/
+            src-tauri/target/release/bundle/appimage/
           if-no-files-found: warn
