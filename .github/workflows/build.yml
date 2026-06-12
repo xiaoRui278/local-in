@@ -63,4 +63,46 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
-          release: false
+
+      - name: Find artifacts
+        id: find-artifacts
+        shell: bash
+        run: |
+          echo "Looking for build artifacts..."
+          find src-tauri/target -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" 2>/dev/null | head -20
+
+      - name: Upload Windows artifacts
+        if: matrix.target == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-Windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+
+      - name: Upload macOS aarch64 artifacts
+        if: matrix.target == 'macos-aarch64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-macOS-AppleSilicon
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: warn
+
+      - name: Upload macOS x86_64 artifacts
+        if: matrix.target == 'macos-x86_64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-macOS-Intel
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: warn
+
+      - name: Upload Linux artifacts
+        if: matrix.target == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-Linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
