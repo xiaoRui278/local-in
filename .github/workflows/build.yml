@@ -58,11 +58,10 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ${{ matrix.args }}
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo tauri build ${{ matrix.args }}
 
       - name: Find artifacts
         id: find-artifacts
@@ -72,21 +71,15 @@ jobs:
           pwd
           echo "=== Looking for build artifacts ==="
           find . -name "*.dmg" -o -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" 2>/dev/null || true
-          echo "=== Check both bundle paths ==="
-          echo "--- Native path ---"
-          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No native bundle"
-          echo "--- Cross-compile path ---"
-          ls -la src-tauri/target/aarch64-apple-darwin/release/bundle/ 2>/dev/null || echo "No aarch64 bundle"
-          ls -la src-tauri/target/x86_64-apple-darwin/release/bundle/ 2>/dev/null || echo "No x86_64 bundle"
+          echo "=== Check bundle paths ==="
+          find . -type d -name "bundle" 2>/dev/null | head -10
 
       - name: Upload Windows artifacts
         if: matrix.target == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-Windows
-          path: |
-            src-tauri/target/**/*.msi
-            src-tauri/target/**/*.exe
+          path: src-tauri/target/release/bundle/
           if-no-files-found: warn
 
       - name: Upload macOS aarch64 artifacts
@@ -94,9 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-macOS-AppleSilicon
-          path: |
-            src-tauri/target/release/bundle/dmg/
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/
           if-no-files-found: warn
 
       - name: Upload macOS x86_64 artifacts
@@ -104,9 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-macOS-Intel
-          path: |
-            src-tauri/target/release/bundle/dmg/
-            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/
           if-no-files-found: warn
 
       - name: Upload Linux artifacts
@@ -114,7 +103,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Local-In-Linux
-          path: |
-            src-tauri/target/release/bundle/deb/
-            src-tauri/target/release/bundle/appimage/
+          path: src-tauri/target/release/bundle/
           if-no-files-found: warn
