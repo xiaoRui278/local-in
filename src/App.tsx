@@ -47,14 +47,14 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState("");
 
-  const [_groups, setGroups] = useState<GroupInfo[]>([]);
+  const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [_groupMessages, setGroupMessages] = useState<GroupMessageRecord[]>([]);
-  const [_showCreateGroup, _setShowCreateGroup] = useState(false);
-  const [_showJoinGroup, setShowJoinGroup] = useState(false);
+  const [groupMessages, setGroupMessages] = useState<GroupMessageRecord[]>([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showJoinGroup, setShowJoinGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [joinPasscode, setJoinPasscode] = useState("");
-  const [_createdPasscode, setCreatedPasscode] = useState<string | null>(null);
+  const [createdPasscode, setCreatedPasscode] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"global" | "group">("global");
 
   useEffect(() => {
@@ -208,7 +208,7 @@ function App() {
     }
   };
 
-  const _handleCreateGroup = async () => {
+  const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
       const group = await invoke<GroupInfo>("create_group", { name: newGroupName.trim() });
@@ -220,7 +220,7 @@ function App() {
     }
   };
 
-  const _handleJoinGroup = async () => {
+  const handleJoinGroup = async () => {
     if (!joinPasscode.trim() || joinPasscode.length !== 4) return;
     try {
       const group = await invoke<GroupInfo>("join_group", { passcode: joinPasscode.trim() });
@@ -238,7 +238,7 @@ function App() {
     }
   };
 
-  const _handleSendGroupMessage = async () => {
+  const handleSendGroupMessage = async () => {
     if (!input.trim() || !selectedGroup) return;
     try {
       await invoke("send_group_message_cmd", {
@@ -262,7 +262,7 @@ function App() {
     }
   };
 
-  const _handleDissolveGroup = async () => {
+  const handleDissolveGroup = async () => {
     if (!selectedGroup) return;
     try {
       await invoke("dissolve_group", { groupId: selectedGroup });
@@ -274,7 +274,7 @@ function App() {
     }
   };
 
-  const _handleLeaveGroup = async () => {
+  const handleLeaveGroup = async () => {
     if (!selectedGroup) return;
     try {
       await invoke("leave_group", { groupId: selectedGroup });
@@ -286,8 +286,9 @@ function App() {
     }
   };
 
-  void _groups, _groupMessages, _showCreateGroup, _setShowCreateGroup, _showJoinGroup, _createdPasscode;
-  void _handleCreateGroup, _handleJoinGroup, _handleSendGroupMessage, _handleDissolveGroup, _handleLeaveGroup;
+  // Suppress unused warnings - will be used in Tasks 6-8
+  void groupMessages, showCreateGroup, showJoinGroup, createdPasscode;
+  void handleCreateGroup, handleJoinGroup, handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
 
   const getAvatarColor = (name: string) => {
     const colors = [
@@ -390,7 +391,24 @@ function App() {
         </div>
 
         <div className="peer-list">
-          <div className="section-label">在线设备</div>
+          <div
+            className={`peer-item ${chatMode === "global" && !selectedPeer ? "selected" : ""}`}
+            onClick={() => {
+              setChatMode("global");
+              setSelectedGroup(null);
+              setSelectedPeer(null);
+            }}
+          >
+            <div className="avatar" style={{ background: "linear-gradient(135deg, #06B6D4, #0EA5E9)" }}>
+              G
+            </div>
+            <div className="peer-info">
+              <span className="peer-name">全局聊天</span>
+              <span className="peer-status">所有人</span>
+            </div>
+          </div>
+
+          <div className="section-label" style={{ marginTop: "16px" }}>在线设备</div>
           {peers.length === 0 ? (
             <div className="empty-state">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3">
@@ -405,8 +423,12 @@ function App() {
             peers.map((peer) => (
               <div
                 key={peer.peer_id}
-                className={`peer-item ${selectedPeer === peer.peer_id ? "selected" : ""}`}
-                onClick={() => setSelectedPeer(peer.peer_id)}
+                className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
+                onClick={() => {
+                  setSelectedPeer(peer.peer_id);
+                  setChatMode("global");
+                  setSelectedGroup(null);
+                }}
               >
                 <div
                   className="avatar"
@@ -423,6 +445,55 @@ function App() {
               </div>
             ))
           )}
+        </div>
+
+        <div className="section-label" style={{ marginTop: "16px" }}>我的群聊</div>
+        <div className="peer-list">
+          {groups.length === 0 ? (
+            <div className="empty-state" style={{ padding: "12px" }}>
+              <p style={{ fontSize: "13px", opacity: 0.5 }}>暂无群聊</p>
+            </div>
+          ) : (
+            groups.map((group) => (
+              <div
+                key={group.id}
+                className={`peer-item ${selectedGroup === group.id ? "selected" : ""}`}
+                onClick={() => {
+                  setSelectedGroup(group.id);
+                  setChatMode("group");
+                  setSelectedPeer(null);
+                }}
+              >
+                <div
+                  className="avatar"
+                  style={{ background: getAvatarColor(group.name) }}
+                >
+                  {group.name[0]}
+                </div>
+                <div className="peer-info">
+                  <span className="peer-name">{group.name}</span>
+                  <span className="peer-status">{group.member_count} 人</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="group-actions" style={{ padding: "12px", display: "flex", gap: "8px" }}>
+          <button
+            className="btn-secondary"
+            style={{ flex: 1, fontSize: "13px" }}
+            onClick={() => setShowCreateGroup(true)}
+          >
+            创建群聊
+          </button>
+          <button
+            className="btn-secondary"
+            style={{ flex: 1, fontSize: "13px" }}
+            onClick={() => setShowJoinGroup(true)}
+          >
+            加入群聊
+          </button>
         </div>
       </div>
 
