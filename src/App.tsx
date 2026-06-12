@@ -541,50 +541,13 @@ function App() {
           <div
             className="section-label"
             style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}
-            onClick={() => setShowDevices(!showDevices)}
+            onClick={() => setShowDevices(true)}
           >
             <span>在线设备 ({peers.length})</span>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              style={{ transform: showDevices ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </div>
-          {showDevices && (
-            <div className="peer-list" style={{ maxHeight: "200px", overflowY: "auto" }}>
-              {peers.length === 0 ? (
-                <div className="empty-state" style={{ padding: "8px" }}>
-                  <p style={{ fontSize: "12px", opacity: 0.5 }}>等待设备...</p>
-                </div>
-              ) : (
-                peers.map((peer) => (
-                  <div
-                    key={peer.peer_id}
-                    className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
-                    onClick={() => {
-                      setSelectedPeer(peer.peer_id);
-                      setChatMode("global");
-                      setSelectedGroup(null);
-                    }}
-                  >
-                    <div className="avatar" style={{ background: getAvatarColor(peer.name) }}>
-                      {peer.name[0]}
-                    </div>
-                    <div className="peer-info">
-                      <span className="peer-name">{peer.name}</span>
-                      <span className="peer-status">{peer.online ? "在线" : "离线"}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
         </div>
 
         <div className="section-label">我的聊天</div>
@@ -956,6 +919,47 @@ function App() {
                 disabled={joinPasscode.length !== 4}
               >
                 加入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDevices && (
+        <div className="modal-overlay" onClick={() => setShowDevices(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>在线设备 ({peers.length})</h3>
+            <div className="modal-content" style={{ maxHeight: "400px", overflowY: "auto" }}>
+              {peers.length === 0 ? (
+                <div className="empty-state">
+                  <p>暂无在线设备</p>
+                </div>
+              ) : (
+                peers.map((peer) => (
+                  <div
+                    key={peer.peer_id}
+                    className="peer-item"
+                    onClick={() => {
+                      setSelectedPeer(peer.peer_id);
+                      setChatMode("global");
+                      setSelectedGroup(null);
+                      setShowDevices(false);
+                    }}
+                  >
+                    <div className="avatar" style={{ background: getAvatarColor(peer.name) }}>
+                      {peer.name[0]}
+                    </div>
+                    <div className="peer-info">
+                      <span className="peer-name">{peer.name}</span>
+                      <span className="peer-status">{peer.online ? "在线" : "离线"}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowDevices(false)}>
+                关闭
               </button>
             </div>
           </div>
