@@ -35,6 +35,16 @@ interface GroupMessageRecord {
   timestamp: number;
 }
 
+interface ChatHistoryItem {
+  peer_id: string;
+  peer_name: string;
+  last_message: string;
+  last_message_time: number;
+  type: "private" | "group";
+  group_id?: string;
+  member_count?: number;
+}
+
 function App() {
   const [name, setName] = useState("");
   const [started, setStarted] = useState(false);
@@ -46,6 +56,9 @@ function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState("");
+  const [fontFamily, setFontFamily] = useState(() => {
+    return localStorage.getItem('font-family') || 'jetbrains';
+  });
 
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -56,6 +69,7 @@ function App() {
   const [joinPasscode, setJoinPasscode] = useState("");
   const [createdPasscode, setCreatedPasscode] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"global" | "group">("global");
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
 
   useEffect(() => {
     loadSavedConfig();
@@ -64,6 +78,16 @@ function App() {
   useEffect(() => {
     document.body.className = theme;
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('font-family', fontFamily);
+    document.documentElement.style.setProperty(
+      '--font-family',
+      fontFamily === 'jetbrains'
+        ? "'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        : "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    );
+  }, [fontFamily]);
 
   useEffect(() => {
     if (started) {
@@ -91,6 +115,36 @@ function App() {
       loadGroups();
     }
   }, [started]);
+
+  useEffect(() => {
+    if (groups.length > 0) {
+      setChatHistory((prev) => {
+        const existingGroupIds = prev
+          .filter((item) => item.type === "group")
+          .map((item) => item.group_id);
+
+        const newGroups = groups.filter(
+          (g) => !existingGroupIds.includes(g.id)
+        );
+
+        if (newGroups.length === 0) return prev;
+
+        const newItems: ChatHistoryItem[] = newGroups.map((group) => ({
+          peer_id: group.id,
+          peer_name: group.name,
+          last_message: "",
+          last_message_time: 0,
+          type: "group" as const,
+          group_id: group.id,
+          member_count: group.member_count,
+        }));
+
+        return [...prev, ...newItems].sort(
+          (a, b) => b.last_message_time - a.last_message_time
+        );
+      });
+    }
+  }, [groups]);
 
   useEffect(() => {
     if (selectedGroup && chatMode === "group") {
@@ -149,6 +203,38 @@ function App() {
           is_read: true,
         },
       ]);
+
+      setChatHistory((prev) => {
+        const existing = prev.find(
+          (item) => item.type === "private" && item.peer_id === selectedPeer
+        );
+        if (existing) {
+          return prev
+            .map((item) =>
+              item.type === "private" && item.peer_id === selectedPeer
+                ? {
+                    ...item,
+                    last_message: input.trim(),
+                    last_message_time: Math.floor(Date.now() / 1000),
+                  }
+                : item
+            )
+            .sort((a, b) => b.last_message_time - a.last_message_time);
+        } else {
+          const peer = peers.find((p) => p.peer_id === selectedPeer);
+          const newItem: ChatHistoryItem = {
+            peer_id: selectedPeer!,
+            peer_name: peer?.name || "Unknown",
+            last_message: input.trim(),
+            last_message_time: Math.floor(Date.now() / 1000),
+            type: "private",
+          };
+          return [newItem, ...prev].sort(
+            (a, b) => b.last_message_time - a.last_message_time
+          );
+        }
+      });
+
       setInput("");
     } catch (e) {
       console.error("Failed to send message:", e);
@@ -256,6 +342,40 @@ function App() {
           timestamp: Math.floor(Date.now() / 1000),
         },
       ]);
+
+      setChatHistory((prev) => {
+        const group = groups.find((g) => g.id === selectedGroup);
+        const existing = prev.find(
+          (item) => item.type === "group" && item.group_id === selectedGroup
+        );
+        if (existing) {
+          return prev
+            .map((item) =>
+              item.type === "group" && item.group_id === selectedGroup
+                ? {
+                    ...item,
+                    last_message: input.trim(),
+                    last_message_time: Math.floor(Date.now() / 1000),
+                  }
+                : item
+            )
+            .sort((a, b) => b.last_message_time - a.last_message_time);
+        } else {
+          const newItem: ChatHistoryItem = {
+            peer_id: selectedGroup,
+            peer_name: group?.name || "Unknown",
+            last_message: input.trim(),
+            last_message_time: Math.floor(Date.now() / 1000),
+            type: "group",
+            group_id: selectedGroup,
+            member_count: group?.member_count,
+          };
+          return [newItem, ...prev].sort(
+            (a, b) => b.last_message_time - a.last_message_time
+          );
+        }
+      });
+
       setInput("");
     } catch (e) {
       console.error("Failed to send group message:", e);
@@ -386,7 +506,7 @@ function App() {
           </div>
         </div>
 
-        <div className="peer-list">
+        <div className="sidebar-section sidebar-fixed">
           <div
             className={`peer-item ${chatMode === "global" && !selectedPeer ? "selected" : ""}`}
             onClick={() => {
@@ -403,72 +523,76 @@ function App() {
               <span className="peer-status">所有人</span>
             </div>
           </div>
-
-          <div className="section-label" style={{ marginTop: "16px" }}>在线设备</div>
-          {peers.length === 0 ? (
-            <div className="empty-state">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-              <p>等待其他设备加入...</p>
-            </div>
-          ) : (
-            peers.map((peer) => (
-              <div
-                key={peer.peer_id}
-                className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
-                onClick={() => {
-                  setSelectedPeer(peer.peer_id);
-                  setChatMode("global");
-                  setSelectedGroup(null);
-                }}
-              >
-                <div
-                  className="avatar"
-                  style={{ background: getAvatarColor(peer.name) }}
-                >
-                  {peer.name[0]}
-                </div>
-                <div className="peer-info">
-                  <span className="peer-name">{peer.name}</span>
-                  <span className="peer-status">
-                    {peer.online ? "在线" : "离线"}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
         </div>
 
-        <div className="section-label" style={{ marginTop: "16px" }}>我的群聊</div>
-        <div className="peer-list">
-          {groups.length === 0 ? (
+        <div className="sidebar-section sidebar-fixed">
+          <div className="section-label">在线设备</div>
+          <div className="peer-list" style={{ maxHeight: "150px", overflowY: "auto" }}>
+            {peers.length === 0 ? (
+              <div className="empty-state" style={{ padding: "8px" }}>
+                <p style={{ fontSize: "12px", opacity: 0.5 }}>等待设备...</p>
+              </div>
+            ) : (
+              peers.map((peer) => (
+                <div
+                  key={peer.peer_id}
+                  className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
+                  onClick={() => {
+                    setSelectedPeer(peer.peer_id);
+                    setChatMode("global");
+                    setSelectedGroup(null);
+                  }}
+                >
+                  <div className="avatar" style={{ background: getAvatarColor(peer.name) }}>
+                    {peer.name[0]}
+                  </div>
+                  <div className="peer-info">
+                    <span className="peer-name">{peer.name}</span>
+                    <span className="peer-status">{peer.online ? "在线" : "离线"}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="section-label">我的聊天</div>
+        <div className="chat-list">
+          {chatHistory.length === 0 ? (
             <div className="empty-state" style={{ padding: "12px" }}>
-              <p style={{ fontSize: "13px", opacity: 0.5 }}>暂无群聊</p>
+              <p style={{ fontSize: "13px", opacity: 0.5 }}>暂无聊天记录</p>
             </div>
           ) : (
-            groups.map((group) => (
+            chatHistory.map((item) => (
               <div
-                key={group.id}
-                className={`peer-item ${selectedGroup === group.id ? "selected" : ""}`}
+                key={item.type === "group" ? item.group_id : item.peer_id}
+                className={`peer-item ${
+                  (item.type === "group" && selectedGroup === item.group_id) ||
+                  (item.type === "private" && selectedPeer === item.peer_id && chatMode === "global")
+                    ? "selected" : ""
+                }`}
                 onClick={() => {
-                  setSelectedGroup(group.id);
-                  setChatMode("group");
-                  setSelectedPeer(null);
+                  if (item.type === "group") {
+                    setSelectedGroup(item.group_id!);
+                    setChatMode("group");
+                    setSelectedPeer(null);
+                  } else {
+                    setSelectedPeer(item.peer_id);
+                    setChatMode("global");
+                    setSelectedGroup(null);
+                  }
                 }}
               >
-                <div
-                  className="avatar"
-                  style={{ background: getAvatarColor(group.name) }}
-                >
-                  {group.name[0]}
+                <div className="avatar" style={{ background: getAvatarColor(item.peer_name) }}>
+                  {item.peer_name[0]}
                 </div>
                 <div className="peer-info">
-                  <span className="peer-name">{group.name}</span>
-                  <span className="peer-status">{group.member_count} 人</span>
+                  <span className="peer-name">
+                    {item.type === "group" ? item.peer_name : item.peer_name}
+                  </span>
+                  <span className="peer-status">
+                    {item.type === "group" ? `${item.member_count} 人` : item.last_message || "新消息"}
+                  </span>
                 </div>
               </div>
             ))
@@ -655,6 +779,23 @@ function App() {
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder="输入新昵称"
               />
+
+              <label style={{ marginTop: "12px" }}>字体</label>
+              <select
+                value={fontFamily}
+                onChange={(e) => setFontFamily(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--border-color)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <option value="jetbrains">JetBrains Mono</option>
+                <option value="system">系统字体</option>
+              </select>
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowSettings(false)}>

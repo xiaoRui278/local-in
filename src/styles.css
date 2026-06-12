@@ -1,4 +1,21 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --color-primary: #2563EB;
   --color-primary-hover: #1D4ED8;
   --color-secondary: #6366F1;
@@ -39,7 +56,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg-primary);
@@ -189,6 +206,21 @@ body {
   gap: 0.75rem;
 }
 
+.sidebar-section {
+  padding: 0.75rem;
+}
+
+.sidebar-fixed {
+  flex-shrink: 0;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0.75rem;
+}
+
 .logo-small {
   width: 40px;
   height: 40px;
@@ -241,7 +273,6 @@ body {
 
 /* Peer List */
 .peer-list {
-  flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
 }
