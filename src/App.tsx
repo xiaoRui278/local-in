@@ -286,9 +286,9 @@ function App() {
     }
   };
 
-  // Suppress unused warnings - will be used in Tasks 7-8
-  void groupMessages, showJoinGroup;
-  void handleJoinGroup, handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
+  // Suppress unused warnings - will be used in Task 8
+  void groupMessages;
+  void handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
 
   const getAvatarColor = (name: string) => {
     const colors = [
@@ -654,6 +654,40 @@ function App() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showJoinGroup && (
+        <div className="modal-overlay" onClick={() => setShowJoinGroup(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>加入群聊</h3>
+            <div className="modal-content">
+              <label>输入 4 位口令</label>
+              <input
+                type="text"
+                value={joinPasscode}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  setJoinPasscode(val);
+                }}
+                placeholder="例如：5823"
+                maxLength={4}
+                onKeyDown={(e) => e.key === "Enter" && handleJoinGroup()}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowJoinGroup(false)}>
+                取消
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleJoinGroup}
+                disabled={joinPasscode.length !== 4}
+              >
+                加入
+              </button>
+            </div>
           </div>
         </div>
       )}
