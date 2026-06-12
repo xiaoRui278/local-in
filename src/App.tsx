@@ -286,10 +286,6 @@ function App() {
     }
   };
 
-  // Suppress unused warnings - will be used in Task 8
-  void groupMessages;
-  void handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
-
   const getAvatarColor = (name: string) => {
     const colors = [
       "linear-gradient(135deg, #F59E0B, #EF4444)",
@@ -498,7 +494,90 @@ function App() {
       </div>
 
       <div className="chat-area">
-        {selectedPeer ? (
+        {chatMode === "group" && selectedGroup ? (
+          <>
+            <div className="chat-header">
+              <div className="chat-user">
+                <div
+                  className="avatar-sm"
+                  style={{
+                    background: getAvatarColor(
+                      groups.find((g) => g.id === selectedGroup)?.name || ""
+                    ),
+                  }}
+                >
+                  {groups.find((g) => g.id === selectedGroup)?.name?.[0]}
+                </div>
+                <div>
+                  <h3>{groups.find((g) => g.id === selectedGroup)?.name}</h3>
+                  <span className="status-text">
+                    {groups.find((g) => g.id === selectedGroup)?.member_count} 人
+                  </span>
+                </div>
+              </div>
+              <div className="header-actions">
+                {groups.find((g) => g.id === selectedGroup)?.creator_peer === myPeerId ? (
+                  <button
+                    className="icon-btn"
+                    onClick={handleDissolveGroup}
+                    title="解散群聊"
+                    style={{ color: "#EF4444" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="15" y1="9" x2="9" y2="15"></line>
+                      <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    className="icon-btn"
+                    onClick={handleLeaveGroup}
+                    title="退出群聊"
+                    style={{ color: "#F59E0B" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="messages">
+              {groupMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message ${msg.from_peer === myPeerId ? "sent" : "received"}`}
+                >
+                  {msg.from_peer !== myPeerId && (
+                    <div className="message-sender">{msg.from_name}</div>
+                  )}
+                  <div className="message-content">{msg.content}</div>
+                  <div className="message-time">{formatTime(msg.timestamp)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="input-area">
+              <input
+                type="text"
+                placeholder="输入消息..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendGroupMessage()}
+              />
+              <button className="send-btn" onClick={handleSendGroupMessage}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </>
+        ) : selectedPeer ? (
           <>
             <div className="chat-header">
               <div className="chat-user">
@@ -559,7 +638,7 @@ function App() {
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
-            <p>选择一个设备开始聊天</p>
+            <p>选择聊天或群组开始对话</p>
           </div>
         )}
       </div>
