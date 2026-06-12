@@ -1,0 +1,80 @@
+<h2>UI风格 v2</h2>
+<p class="subtitle">重新设计，更精致的方案</p>
+
+<div class="cards">
+  <div class="card" data-choice="wechat" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#ededed;color:#333;padding:0;font-family:system-ui;display:flex;height:200px;border-radius:8px;overflow:hidden">
+        <div style="width:70px;background:#2e2e2e;padding:12px 8px;display:flex;flex-direction:column;gap:8px">
+          <div style="width:36px;height:36px;background:#07c160;border-radius:6px;margin:0 auto"></div>
+          <div style="width:36px;height:36px;background:#555;border-radius:6px;margin:0 auto"></div>
+          <div style="width:36px;height:36px;background:#555;border-radius:6px;margin:0 auto"></div>
+        </div>
+        <div style="flex:1;padding:12px">
+          <div style="font-size:12px;opacity:0.5;margin-bottom:8px">小明</div>
+          <div style="background:white;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:6px;display:inline-block">你好！</div>
+          <div style="background:#95ec69;padding:8px 12px;border-radius:4px;font-size:13px;margin-bottom:6px;display:inline-block;float:right">在的</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>微信风格</h3>
+      <p>经典绿色主题，左侧联系人列表</p>
+    </div>
+  </div>
+  
+  <div class="card" data-choice="telegram" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#17212b;color:#eee;padding:0;font-family:system-ui;display:flex;height:200px;border-radius:8px;overflow:hidden">
+        <div style="width:80px;background:#0e1621;padding:10px 8px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;padding:6px;border-radius:4px;background:#2b5278">
+            <div style="width:28px;height:28px;background:#6ab2f2;border-radius:50%"></div>
+            <div style="font-size:11px">小明</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:6px;border-radius:4px">
+            <div style="width:28px;height:28px;background:#f26ab2;border-radius:50%"></div>
+            <div style="font-size:11px">小红</div>
+          </div>
+        </div>
+        <div style="flex:1;padding:12px;display:flex;flex-direction:column;gap:6px">
+          <div style="background:#182533;padding:8px 12px;border-radius:8px 8px 8px 0;font-size:13px;align-self:flex-start">你好！</div>
+          <div style="background:#2b5278;padding:8px 12px;border-radius:8px 8px 0 8px;font-size:13px;align-self:flex-end">在的</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Telegram风格</h3>
+      <p>深蓝主题，圆润气泡设计</p>
+    </div>
+  </div>
+  
+  <div class="card" data-choice="macos" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#f5f5f7;color:#333;padding:0;font-family:system-ui;display:flex;height:200px;border-radius:8px;overflow:hidden;border:1px solid #ddd">
+        <div style="width:80px;background:#e8e8ed;padding:10px 8px;display:flex;flex-direction:column;gap:6px;border-right:1px solid #ddd">
+          <div style="display:flex;align-items:center;gap:6px;padding:6px;border-radius:6px;background:white;box-shadow:0 1px 2px rgba(0,0,0,0.1)">
+            <div style="width:28px;height:28px;background:linear-gradient(135deg,#007aff,#5856d6);border-radius:50%"></div>
+            <div style="font-size:11px;font-weight:500">小明</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:6px;border-radius:6px">
+            <div style="width:28px;height:28px;background:linear-gradient(135deg,#ff6b6b,#ee5a24);border-radius:50%"></div>
+            <div style="font-size:11px">小红</div>
+          </div>
+        </div>
+        <div style="flex:1;padding:12px;display:flex;flex-direction:column;gap:6px;background:white">
+          <div style="background:#e8e8ed;padding:8px 12px;border-radius:12px;font-size:13px;align-self:flex-start">你好！</div>
+          <div style="background:#007aff;color:white;padding:8px 12px;border-radius:12px;font-size:13px;align-self:flex-end">在的</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>macOS风格</h3>
+      <p>苹果设计语言，圆角卡片，渐变头像</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="label">请在终端回答</p>
+  <p>这版如何？或者告诉我你想要什么风格。</p>
+</div>
