@@ -167,6 +167,7 @@ async fn send_file(
     if let Some(node) = node_guard.as_ref() {
         let filename = file::get_filename(&path);
         let file_data = file::read_file_data(&path).await?;
+        let file_size = file_data.len() as i64;
         let file_id = node.send_file(peer_id.clone(), filename.clone(), file_data).await?;
 
         let record = db::FileRecord {
@@ -174,7 +175,7 @@ async fn send_file(
             from_peer: node.peer_id(),
             to_peer: peer_id,
             filename,
-            file_size: file::read_file_data(&path).await.unwrap_or_default().len() as i64,
+            file_size,
             status: "sending".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
         };
