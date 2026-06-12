@@ -16,6 +16,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
+rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
