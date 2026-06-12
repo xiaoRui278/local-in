@@ -25,3 +25,9 @@ dist-ssr
 
 # Rust
 src-tauri/target/
+
+# AI generated (local only)
+AGENTS.md
+.sisyphus/
+.superpowers/
+docs/
