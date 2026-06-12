@@ -403,7 +403,7 @@ function App() {
               G
             </div>
             <div className="peer-info">
-              <span className="peer-name">全局聊天</span>
+              <span className="peer-name">公共频道</span>
               <span className="peer-status">所有人</span>
             </div>
           </div>
