@@ -532,17 +532,8 @@ function App() {
             </div>
             <div className="peer-info">
               <span className="peer-name">公共频道</span>
-              <span className="peer-status">所有人</span>
+              <span className="peer-status">{peers.length} 在线</span>
             </div>
-          </div>
-        </div>
-
-        <div className="sidebar-section sidebar-fixed">
-          <div
-            className="section-label"
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
-          >
-            <span>在线设备 ({peers.length})</span>
           </div>
         </div>
 
