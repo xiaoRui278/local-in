@@ -70,6 +70,10 @@ function App() {
   const [createdPasscode, setCreatedPasscode] = useState<string | null>(null);
   const [chatMode, setChatMode] = useState<"global" | "group">("global");
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [showDevices, setShowDevices] = useState(false);
+  const [fontSize, setFontSize] = useState(() => {
+    return localStorage.getItem('font-size') || '14';
+  });
 
   useEffect(() => {
     loadSavedConfig();
@@ -88,6 +92,11 @@ function App() {
         : "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
     );
   }, [fontFamily]);
+
+  useEffect(() => {
+    localStorage.setItem('font-size', fontSize);
+    document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
+  }, [fontSize]);
 
   useEffect(() => {
     if (started) {
@@ -515,8 +524,11 @@ function App() {
               setSelectedPeer(null);
             }}
           >
-            <div className="avatar" style={{ background: "linear-gradient(135deg, #06B6D4, #0EA5E9)" }}>
-              G
+            <div className="avatar" style={{ background: "linear-gradient(135deg, #06B6D4, #0EA5E9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
             </div>
             <div className="peer-info">
               <span className="peer-name">公共频道</span>
@@ -526,34 +538,53 @@ function App() {
         </div>
 
         <div className="sidebar-section sidebar-fixed">
-          <div className="section-label">在线设备</div>
-          <div className="peer-list" style={{ maxHeight: "150px", overflowY: "auto" }}>
-            {peers.length === 0 ? (
-              <div className="empty-state" style={{ padding: "8px" }}>
-                <p style={{ fontSize: "12px", opacity: 0.5 }}>等待设备...</p>
-              </div>
-            ) : (
-              peers.map((peer) => (
-                <div
-                  key={peer.peer_id}
-                  className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
-                  onClick={() => {
-                    setSelectedPeer(peer.peer_id);
-                    setChatMode("global");
-                    setSelectedGroup(null);
-                  }}
-                >
-                  <div className="avatar" style={{ background: getAvatarColor(peer.name) }}>
-                    {peer.name[0]}
-                  </div>
-                  <div className="peer-info">
-                    <span className="peer-name">{peer.name}</span>
-                    <span className="peer-status">{peer.online ? "在线" : "离线"}</span>
-                  </div>
-                </div>
-              ))
-            )}
+          <div
+            className="section-label"
+            style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+            onClick={() => setShowDevices(!showDevices)}
+          >
+            <span>在线设备 ({peers.length})</span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              style={{ transform: showDevices ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </div>
+          {showDevices && (
+            <div className="peer-list" style={{ maxHeight: "200px", overflowY: "auto" }}>
+              {peers.length === 0 ? (
+                <div className="empty-state" style={{ padding: "8px" }}>
+                  <p style={{ fontSize: "12px", opacity: 0.5 }}>等待设备...</p>
+                </div>
+              ) : (
+                peers.map((peer) => (
+                  <div
+                    key={peer.peer_id}
+                    className={`peer-item ${selectedPeer === peer.peer_id && chatMode === "global" ? "selected" : ""}`}
+                    onClick={() => {
+                      setSelectedPeer(peer.peer_id);
+                      setChatMode("global");
+                      setSelectedGroup(null);
+                    }}
+                  >
+                    <div className="avatar" style={{ background: getAvatarColor(peer.name) }}>
+                      {peer.name[0]}
+                    </div>
+                    <div className="peer-info">
+                      <span className="peer-name">{peer.name}</span>
+                      <span className="peer-status">{peer.online ? "在线" : "离线"}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         <div className="section-label">我的聊天</div>
@@ -795,6 +826,25 @@ function App() {
               >
                 <option value="jetbrains">JetBrains Mono</option>
                 <option value="system">系统字体</option>
+              </select>
+
+              <label style={{ marginTop: "12px" }}>字体大小</label>
+              <select
+                value={fontSize}
+                onChange={(e) => setFontSize(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--border-color)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                }}
+              >
+                <option value="12">小 (12px)</option>
+                <option value="14">中 (14px)</option>
+                <option value="16">大 (16px)</option>
+                <option value="18">特大 (18px)</option>
               </select>
             </div>
             <div className="modal-actions">
