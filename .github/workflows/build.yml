@@ -72,10 +72,12 @@ jobs:
           pwd
           echo "=== Looking for build artifacts ==="
           find . -name "*.dmg" -o -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" 2>/dev/null || true
-          echo "=== Target directory structure ==="
-          ls -la src-tauri/target/ 2>/dev/null || true
-          ls -la src-tauri/target/release/ 2>/dev/null || true
-          ls -la src-tauri/target/aarch64-apple-darwin/ 2>/dev/null || true
+          echo "=== Check both bundle paths ==="
+          echo "--- Native path ---"
+          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "No native bundle"
+          echo "--- Cross-compile path ---"
+          ls -la src-tauri/target/aarch64-apple-darwin/release/bundle/ 2>/dev/null || echo "No aarch64 bundle"
+          ls -la src-tauri/target/x86_64-apple-darwin/release/bundle/ 2>/dev/null || echo "No x86_64 bundle"
 
       - name: Upload Windows artifacts
         if: matrix.target == 'windows'
@@ -93,7 +95,8 @@ jobs:
         with:
           name: Local-In-macOS-AppleSilicon
           path: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Local-In_1.0.0_aarch64.dmg
+            src-tauri/target/release/bundle/dmg/
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
           if-no-files-found: warn
 
       - name: Upload macOS x86_64 artifacts
@@ -102,7 +105,8 @@ jobs:
         with:
           name: Local-In-macOS-Intel
           path: |
-            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Local-In_1.0.0_x64.dmg
+            src-tauri/target/release/bundle/dmg/
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/
           if-no-files-found: warn
 
       - name: Upload Linux artifacts
