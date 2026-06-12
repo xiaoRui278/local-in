@@ -20,8 +20,11 @@ jobs:
             target: windows
             args: ""
           - platform: macos-latest
-            target: macos
-            args: "--target universal-apple-darwin"
+            target: macos-arm64
+            args: ""
+          - platform: macos-13
+            target: macos-x64
+            args: ""
           - platform: ubuntu-22.04
             target: linux
             args: ""
@@ -33,8 +36,6 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,universal-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -79,12 +80,20 @@ jobs:
           path: src-tauri/target/release/bundle/
           if-no-files-found: warn
 
-      - name: Upload macOS artifacts
-        if: matrix.target == 'macos'
+      - name: Upload macOS ARM64 artifacts
+        if: matrix.target == 'macos-arm64'
         uses: actions/upload-artifact@v4
         with:
-          name: Local-In-macOS
-          path: src-tauri/target/universal-apple-darwin/release/bundle/
+          name: Local-In-macOS-ARM64
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: warn
+
+      - name: Upload macOS x64 artifacts
+        if: matrix.target == 'macos-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-macOS-x64
+          path: src-tauri/target/release/bundle/
           if-no-files-found: warn
 
       - name: Upload Linux artifacts
