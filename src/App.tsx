@@ -18,6 +18,23 @@ interface MessageRecord {
   is_read: boolean;
 }
 
+interface GroupInfo {
+  id: string;
+  name: string;
+  passcode: string;
+  creator_peer: string;
+  member_count: number;
+}
+
+interface GroupMessageRecord {
+  id: string;
+  group_id: string;
+  from_peer: string;
+  from_name: string;
+  content: string;
+  timestamp: number;
+}
+
 function App() {
   const [name, setName] = useState("");
   const [started, setStarted] = useState(false);
@@ -29,6 +46,16 @@ function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState("");
+
+  const [_groups, setGroups] = useState<GroupInfo[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [_groupMessages, setGroupMessages] = useState<GroupMessageRecord[]>([]);
+  const [_showCreateGroup, _setShowCreateGroup] = useState(false);
+  const [_showJoinGroup, setShowJoinGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [joinPasscode, setJoinPasscode] = useState("");
+  const [_createdPasscode, setCreatedPasscode] = useState<string | null>(null);
+  const [chatMode, setChatMode] = useState<"global" | "group">("global");
 
   useEffect(() => {
     loadSavedConfig();
@@ -58,6 +85,18 @@ function App() {
       loadMessages(selectedPeer);
     }
   }, [selectedPeer]);
+
+  useEffect(() => {
+    if (started) {
+      loadGroups();
+    }
+  }, [started]);
+
+  useEffect(() => {
+    if (selectedGroup && chatMode === "group") {
+      loadGroupMessages(selectedGroup);
+    }
+  }, [selectedGroup, chatMode]);
 
   const loadSavedConfig = async () => {
     try {
@@ -147,6 +186,108 @@ function App() {
       console.error("Failed to send file:", e);
     }
   };
+
+  const loadGroups = async () => {
+    try {
+      const groupList = await invoke<GroupInfo[]>("get_groups");
+      setGroups(groupList);
+    } catch (e) {
+      console.error("Failed to get groups:", e);
+    }
+  };
+
+  const loadGroupMessages = async (groupId: string) => {
+    try {
+      const msgs = await invoke<GroupMessageRecord[]>("get_group_messages_cmd", {
+        groupId,
+        limit: 100,
+      });
+      setGroupMessages(msgs.reverse());
+    } catch (e) {
+      console.error("Failed to get group messages:", e);
+    }
+  };
+
+  const _handleCreateGroup = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      const group = await invoke<GroupInfo>("create_group", { name: newGroupName.trim() });
+      setCreatedPasscode(group.passcode);
+      setGroups((prev) => [group, ...prev]);
+      setNewGroupName("");
+    } catch (e) {
+      console.error("Failed to create group:", e);
+    }
+  };
+
+  const _handleJoinGroup = async () => {
+    if (!joinPasscode.trim() || joinPasscode.length !== 4) return;
+    try {
+      const group = await invoke<GroupInfo>("join_group", { passcode: joinPasscode.trim() });
+      setGroups((prev) => {
+        const exists = prev.find((g) => g.id === group.id);
+        if (exists) return prev;
+        return [group, ...prev];
+      });
+      setJoinPasscode("");
+      setShowJoinGroup(false);
+      setSelectedGroup(group.id);
+      setChatMode("group");
+    } catch (e) {
+      console.error("Failed to join group:", e);
+    }
+  };
+
+  const _handleSendGroupMessage = async () => {
+    if (!input.trim() || !selectedGroup) return;
+    try {
+      await invoke("send_group_message_cmd", {
+        groupId: selectedGroup,
+        content: input.trim(),
+      });
+      setGroupMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          group_id: selectedGroup,
+          from_peer: myPeerId,
+          from_name: name,
+          content: input.trim(),
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+      ]);
+      setInput("");
+    } catch (e) {
+      console.error("Failed to send group message:", e);
+    }
+  };
+
+  const _handleDissolveGroup = async () => {
+    if (!selectedGroup) return;
+    try {
+      await invoke("dissolve_group", { groupId: selectedGroup });
+      setGroups((prev) => prev.filter((g) => g.id !== selectedGroup));
+      setSelectedGroup(null);
+      setChatMode("global");
+    } catch (e) {
+      console.error("Failed to dissolve group:", e);
+    }
+  };
+
+  const _handleLeaveGroup = async () => {
+    if (!selectedGroup) return;
+    try {
+      await invoke("leave_group", { groupId: selectedGroup });
+      setGroups((prev) => prev.filter((g) => g.id !== selectedGroup));
+      setSelectedGroup(null);
+      setChatMode("global");
+    } catch (e) {
+      console.error("Failed to leave group:", e);
+    }
+  };
+
+  void _groups, _groupMessages, _showCreateGroup, _setShowCreateGroup, _showJoinGroup, _createdPasscode;
+  void _handleCreateGroup, _handleJoinGroup, _handleSendGroupMessage, _handleDissolveGroup, _handleLeaveGroup;
 
   const getAvatarColor = (name: string) => {
     const colors = [
