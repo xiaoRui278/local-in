@@ -59,9 +59,7 @@ jobs:
 
       - name: Build Tauri app
         shell: bash
-        run: |
-          cd src-tauri
-          cargo tauri build ${{ matrix.args }}
+        run: npx tauri build ${{ matrix.args }}
 
       - name: Find artifacts
         id: find-artifacts
