@@ -286,9 +286,9 @@ function App() {
     }
   };
 
-  // Suppress unused warnings - will be used in Tasks 6-8
-  void groupMessages, showCreateGroup, showJoinGroup, createdPasscode;
-  void handleCreateGroup, handleJoinGroup, handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
+  // Suppress unused warnings - will be used in Tasks 7-8
+  void groupMessages, showJoinGroup;
+  void handleJoinGroup, handleSendGroupMessage, handleDissolveGroup, handleLeaveGroup;
 
   const getAvatarColor = (name: string) => {
     const colors = [
@@ -585,6 +585,75 @@ function App() {
                 保存
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateGroup && (
+        <div className="modal-overlay" onClick={() => { setShowCreateGroup(false); setCreatedPasscode(null); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{createdPasscode ? "群聊已创建" : "创建群聊"}</h3>
+            {!createdPasscode ? (
+              <>
+                <div className="modal-content">
+                  <label>群名称</label>
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="输入群名称"
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
+                  />
+                </div>
+                <div className="modal-actions">
+                  <button className="btn-secondary" onClick={() => setShowCreateGroup(false)}>
+                    取消
+                  </button>
+                  <button className="btn-primary" onClick={handleCreateGroup}>
+                    创建
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="modal-content" style={{ textAlign: "center" }}>
+                  <p style={{ marginBottom: "12px" }}>分享此口令邀请好友加入：</p>
+                  <div
+                    style={{
+                      fontSize: "36px",
+                      fontWeight: "bold",
+                      letterSpacing: "8px",
+                      color: "#10B981",
+                      padding: "16px",
+                      background: "rgba(16, 185, 129, 0.1)",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    {createdPasscode}
+                  </div>
+                  <button
+                    className="btn-secondary"
+                    style={{ marginTop: "12px", fontSize: "13px" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdPasscode);
+                    }}
+                  >
+                    复制口令
+                  </button>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      setShowCreateGroup(false);
+                      setCreatedPasscode(null);
+                    }}
+                  >
+                    完成
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
