@@ -19,7 +19,11 @@ jobs:
           - platform: windows-latest
             target: windows
           - platform: macos-latest
-            target: macos
+            target: macos-aarch64
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            target: macos-x86_64
+            args: --target x86_64-apple-darwin
           - platform: ubuntu-22.04
             target: linux
 
@@ -55,10 +59,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        if: github.event_name == 'pull_request'
         with:
           name: Local-In-${{ matrix.target }}
           path: |
@@ -68,3 +73,4 @@ jobs:
             src-tauri/target/release/bundle/**/*.app
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.AppImage
+          if-no-files-found: warn
