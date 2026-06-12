@@ -63,6 +63,10 @@ body {
   color: var(--text-primary);
 }
 
+*, *::before, *::after {
+  font-family: inherit;
+}
+
 .app {
   display: flex;
   height: 100vh;
