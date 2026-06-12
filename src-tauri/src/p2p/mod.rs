@@ -56,6 +56,24 @@ pub struct PeerUpdate {
     pub avatar: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GroupMessage {
+    Chat {
+        from: String,
+        from_name: String,
+        content: String,
+        timestamp: u64,
+    },
+    Join {
+        peer_id: String,
+        peer_name: String,
+    },
+    Leave {
+        peer_id: String,
+    },
+    Dissolve,
+}
+
 #[derive(Debug)]
 enum SwarmCommand {
     SendMessage {
@@ -71,6 +89,19 @@ enum SwarmCommand {
     },
     GetPeers {
         resp: oneshot::Sender<Vec<PeerInfo>>,
+    },
+    SubscribeGroup {
+        topic: String,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    UnsubscribeGroup {
+        topic: String,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    SendGroupMessage {
+        topic: String,
+        message: GroupMessage,
+        resp: oneshot::Sender<Result<(), String>>,
     },
     Stop {
         resp: oneshot::Sender<()>,
@@ -192,6 +223,23 @@ impl P2PNode {
                                         peer.avatar = update.avatar;
                                     }
                                 }
+                            } else if topic_str.starts_with("local-in-group-") {
+                                if let Ok(group_msg) = serde_json::from_slice::<GroupMessage>(&message.data) {
+                                    match group_msg {
+                                        GroupMessage::Chat { from: _, from_name, content, timestamp: _ } => {
+                                            tracing::info!("[Group {}] {}: {}", topic_str, from_name, content);
+                                        }
+                                        GroupMessage::Join { peer_id: _, peer_name } => {
+                                            tracing::info!("[Group {}] {} joined", topic_str, peer_name);
+                                        }
+                                        GroupMessage::Leave { peer_id } => {
+                                            tracing::info!("[Group {}] {} left", topic_str, peer_id);
+                                        }
+                                        GroupMessage::Dissolve => {
+                                            tracing::info!("[Group {}] Group dissolved", topic_str);
+                                        }
+                                    }
+                                }
                             } else if topic_str == "local-in-files" {
                                 if let Ok(file_msg) = serde_json::from_slice::<FileMessage>(&message.data) {
                                     match file_msg {
@@ -284,6 +332,35 @@ impl P2PNode {
                         Some(SwarmCommand::GetPeers { resp }) => {
                             let _ = resp.send(peers.values().cloned().collect());
                         }
+                        Some(SwarmCommand::SubscribeGroup { topic, resp }) => {
+                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
+                            let result = swarm
+                                .behaviour_mut()
+                                .gossipsub
+                                .subscribe(&gossipsub_topic)
+                                .map(|_| ())
+                                .map_err(|e| e.to_string());
+                            let _ = resp.send(result);
+                        }
+                        Some(SwarmCommand::UnsubscribeGroup { topic, resp }) => {
+                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
+                            let _result = swarm
+                                .behaviour_mut()
+                                .gossipsub
+                                .unsubscribe(&gossipsub_topic);
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::SendGroupMessage { topic, message, resp }) => {
+                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
+                            let data = serde_json::to_vec(&message).unwrap();
+                            let result = swarm
+                                .behaviour_mut()
+                                .gossipsub
+                                .publish(gossipsub_topic, data)
+                                .map(|_| ())
+                                .map_err(|e| e.to_string());
+                            let _ = resp.send(result);
+                        }
                         Some(SwarmCommand::Stop { resp }) => {
                             let _ = resp.send(());
                             break;
@@ -337,6 +414,53 @@ impl P2PNode {
             .await
             .map_err(|_| "Failed to send command".to_string())?;
 
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn subscribe_group(&self, topic: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SubscribeGroup {
+                topic: topic.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn unsubscribe_group(&self, topic: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::UnsubscribeGroup {
+                topic: topic.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn send_group_message(
+        &self,
+        topic: &str,
+        message: GroupMessage,
+    ) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SendGroupMessage {
+                topic: topic.to_string(),
+                message,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
         resp_rx
             .await
             .map_err(|_| "Failed to get response".to_string())?
