@@ -126,7 +126,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS group_members (
                 group_id TEXT NOT NULL,
                 peer_id TEXT NOT NULL,
-                peer_name TEXT,
+                peer_name TEXT NOT NULL DEFAULT '',
                 joined_at INTEGER NOT NULL,
                 PRIMARY KEY (group_id, peer_id)
             );
@@ -142,7 +142,6 @@ impl Database {
             ",
         )?;
 
-        let conn = self.conn.lock().unwrap();
         let _ = conn.execute_batch(
             "ALTER TABLE messages ADD COLUMN from_name TEXT NOT NULL DEFAULT '';"
         );
