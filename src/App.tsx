@@ -17,6 +17,10 @@ interface MessageRecord {
   content: string;
   timestamp: number;
   is_read: boolean;
+  file_id?: string;
+  file_name?: string;
+  file_size?: number;
+  file_status?: "pending" | "transferring" | "completed";
 }
 
 interface GroupInfo {
