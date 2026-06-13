@@ -269,6 +269,24 @@ impl P2PNode {
                                 };
                                 peers.insert(peer_id.to_string(), info);
                                 tracing::info!("Total peers: {}", peers.len());
+
+                                let name_msg = ChatMessage {
+                                    from: local_peer_id.clone(),
+                                    from_name: name.clone(),
+                                    content: String::new(),
+                                    timestamp: SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs(),
+                                    to_peer: String::new(),
+                                };
+                                let data = serde_json::to_string(&name_msg).unwrap();
+                                let request = ChatRequest::SendMessage(data);
+                                let peer_id_copy = peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request);
                             }
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
@@ -296,9 +314,13 @@ impl P2PNode {
                                                 peer_info.name = msg.from_name.clone();
                                             }
                                         }
-                                        match received_msg_tx.try_send(msg) {
-                                            Ok(_) => tracing::info!("Message forwarded to main thread"),
-                                            Err(e) => tracing::error!("Failed to forward message: {}", e),
+                                        if !msg.content.is_empty() {
+                                            match received_msg_tx.try_send(msg) {
+                                                Ok(_) => tracing::info!("Message forwarded to main thread"),
+                                                Err(e) => tracing::error!("Failed to forward message: {}", e),
+                                            }
+                                        } else {
+                                            tracing::info!("Name announcement received, not forwarding");
                                         }
                                     }
                                     let _ = swarm
