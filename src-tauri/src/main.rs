@@ -75,6 +75,7 @@ async fn start_node(
                     } else {
                         msg.to_peer
                     };
+                    tracing::info!("Message to_peer: {}, content: {}", to_peer, msg.content);
                     let record = MessageRecord {
                         id: uuid::Uuid::new_v4().to_string(),
                         from_peer: msg.from,

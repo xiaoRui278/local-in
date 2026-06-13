@@ -209,10 +209,14 @@ function App() {
       const onMessage = new Channel<MessagePayload>();
       onMessage.onmessage = (payload) => {
         const msg = payload.record;
+        console.log("Received message via channel:", msg);
+        console.log("to_peer:", msg.to_peer, "from_peer:", msg.from_peer);
         
         if (msg.to_peer === "global") {
+          console.log("Adding to global messages");
           setGlobalMessages((prev) => [...prev, msg]);
         } else {
+          console.log("Adding to private messages");
           setMessages((prev) => [...prev, msg]);
         }
         
