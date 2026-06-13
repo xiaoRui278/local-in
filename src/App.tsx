@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 interface Peer {
@@ -124,6 +125,7 @@ function App() {
   useEffect(() => {
     if (started) {
       loadGroups();
+      loadGlobalMessages();
     }
   }, [started]);
 
@@ -165,14 +167,15 @@ function App() {
 
   useEffect(() => {
     if (started) {
-      const interval = setInterval(() => {
+      const unlisten = listen<MessageRecord>("new-message", (event) => {
+        const msg = event.payload;
         if (chatMode === "global" && !selectedPeer) {
-          loadGlobalMessages();
-        } else if (selectedPeer) {
-          loadMessages(selectedPeer);
+          setGlobalMessages((prev) => [...prev, msg]);
         }
-      }, 3000);
-      return () => clearInterval(interval);
+      });
+      return () => {
+        unlisten.then((fn) => fn());
+      };
     }
   }, [started, chatMode, selectedPeer]);
 

@@ -2,7 +2,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 mod db;
@@ -36,6 +36,7 @@ struct GroupInfo {
 
 #[tauri::command]
 async fn start_node(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     name: String,
 ) -> Result<String, String> {
@@ -57,6 +58,7 @@ async fn start_node(
     let my_peer_id = peer_id.clone();
 
     if let Some(mut msg_rx) = msg_rx {
+        let app_handle = app.clone();
         tokio::spawn(async move {
             tracing::info!("Message receiver task started");
             while let Some(msg) = msg_rx.recv().await {
@@ -72,7 +74,10 @@ async fn start_node(
                         is_read: false,
                     };
                     match db.save_message(&record) {
-                        Ok(_) => tracing::info!("Message saved to DB"),
+                        Ok(_) => {
+                            tracing::info!("Message saved to DB");
+                            let _ = app_handle.emit("new-message", &record);
+                        }
                         Err(e) => tracing::error!("Failed to save message: {}", e),
                     }
                 } else {
