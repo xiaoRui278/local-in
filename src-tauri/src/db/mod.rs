@@ -141,6 +141,12 @@ impl Database {
             );
             ",
         )?;
+
+        let conn = self.conn.lock().unwrap();
+        let _ = conn.execute_batch(
+            "ALTER TABLE messages ADD COLUMN from_name TEXT NOT NULL DEFAULT '';"
+        );
+
         Ok(())
     }
 
