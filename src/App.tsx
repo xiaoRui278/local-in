@@ -164,12 +164,17 @@ function App() {
   }, [selectedGroup, chatMode]);
 
   useEffect(() => {
-    if (chatMode === "global" && !selectedPeer) {
-      loadGlobalMessages();
-      const interval = setInterval(loadGlobalMessages, 3000);
+    if (started) {
+      const interval = setInterval(() => {
+        if (chatMode === "global" && !selectedPeer) {
+          loadGlobalMessages();
+        } else if (selectedPeer) {
+          loadMessages(selectedPeer);
+        }
+      }, 3000);
       return () => clearInterval(interval);
     }
-  }, [chatMode, selectedPeer]);
+  }, [started, chatMode, selectedPeer]);
 
   const loadSavedConfig = async () => {
     try {
