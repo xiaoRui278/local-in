@@ -18,6 +18,15 @@ struct MessagePayload {
     is_new: bool,
 }
 
+#[derive(Clone, Serialize)]
+struct FilePayload {
+    from: String,
+    from_name: String,
+    filename: String,
+    file_path: String,
+    timestamp: u64,
+}
+
 struct AppState {
     node: Mutex<Option<P2PNode>>,
     db: Arc<Database>,
@@ -46,6 +55,7 @@ async fn start_node(
     state: tauri::State<'_, AppState>,
     name: String,
     on_message: tauri::ipc::Channel<MessagePayload>,
+    on_file: tauri::ipc::Channel<FilePayload>,
 ) -> Result<String, String> {
     let mut node_guard = state.node.lock().await;
     let mut node = P2PNode::new(name.clone()).await.map_err(|e| e.to_string())?;
@@ -105,6 +115,35 @@ async fn start_node(
                 }
             }
             tracing::info!("Message receiver task ended");
+        });
+    }
+
+    let file_rx = node.take_file_receiver();
+    if let Some(mut file_rx) = file_rx {
+        tokio::spawn(async move {
+            tracing::info!("File receiver task started");
+            while let Some(file) = file_rx.recv().await {
+                tracing::info!("Received file from {}: {}", file.from_name, file.filename);
+                let download_dir = dirs::download_dir().unwrap_or_default();
+                let file_path = download_dir.join(&file.filename);
+                match std::fs::write(&file_path, &file.data) {
+                    Ok(_) => {
+                        tracing::info!("File saved to {:?}", file_path);
+                        let payload = FilePayload {
+                            from: file.from,
+                            from_name: file.from_name,
+                            filename: file.filename,
+                            file_path: file_path.to_string_lossy().to_string(),
+                            timestamp: file.timestamp,
+                        };
+                        if let Err(e) = on_file.send(payload) {
+                            tracing::error!("Failed to send file via channel: {}", e);
+                        }
+                    }
+                    Err(e) => tracing::error!("Failed to save file: {}", e),
+                }
+            }
+            tracing::info!("File receiver task ended");
         });
     }
 

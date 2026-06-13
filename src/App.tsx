@@ -51,6 +51,14 @@ interface MessagePayload {
   is_new: boolean;
 }
 
+interface FilePayload {
+  from: string;
+  from_name: string;
+  filename: string;
+  file_path: string;
+  timestamp: number;
+}
+
 function App() {
   const [name, setName] = useState("");
   const [started, setStarted] = useState(false);
@@ -270,7 +278,13 @@ function App() {
         }
       };
 
-      const peerId = await invoke<string>("start_node", { name: name.trim(), onMessage });
+      const onFile = new Channel<FilePayload>();
+      onFile.onmessage = (payload) => {
+        console.log("Received file:", payload);
+        alert(`收到文件: ${payload.filename}\n已保存到下载文件夹`);
+      };
+
+      const peerId = await invoke<string>("start_node", { name: name.trim(), onMessage, onFile });
       setMyPeerId(peerId);
       myPeerIdRef.current = peerId;
       setStarted(true);
