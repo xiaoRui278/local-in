@@ -136,6 +136,9 @@ impl P2PNode {
             )?
             .with_behaviour(|key| {
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
+                    .mesh_n(1)
+                    .mesh_n_low(1)
+                    .mesh_n_high(2)
                     .validation_mode(gossipsub::ValidationMode::None)
                     .build()
                     .map_err(|e| e.to_string())?;
