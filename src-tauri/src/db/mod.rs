@@ -161,11 +161,34 @@ impl Database {
     pub fn get_messages(&self, peer_id: &str, limit: i64) -> Result<Vec<MessageRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE from_peer = ?1 OR to_peer = ?1 ORDER BY timestamp DESC LIMIT ?2"
+            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer != 'global') OR (to_peer = ?1 AND from_peer != 'global') ORDER BY timestamp DESC LIMIT ?2"
         )?;
 
         let messages = stmt
             .query_map((peer_id, limit), |row| {
+                Ok(MessageRecord {
+                    id: row.get(0)?,
+                    from_peer: row.get(1)?,
+                    from_name: row.get(2)?,
+                    to_peer: row.get(3)?,
+                    content: row.get(4)?,
+                    timestamp: row.get(5)?,
+                    is_read: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(messages)
+    }
+
+    pub fn get_dm_messages(&self, peer1: &str, peer2: &str, limit: i64) -> Result<Vec<MessageRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer = ?2) OR (from_peer = ?2 AND to_peer = ?1) ORDER BY timestamp DESC LIMIT ?3"
+        )?;
+
+        let messages = stmt
+            .query_map((peer1, peer2, limit), |row| {
                 Ok(MessageRecord {
                     id: row.get(0)?,
                     from_peer: row.get(1)?,

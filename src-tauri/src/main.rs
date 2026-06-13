@@ -258,6 +258,19 @@ async fn get_messages(
 }
 
 #[tauri::command]
+async fn get_dm_messages(
+    state: tauri::State<'_, AppState>,
+    peer1: String,
+    peer2: String,
+    limit: i64,
+) -> Result<Vec<MessageRecord>, String> {
+    state
+        .db
+        .get_dm_messages(&peer1, &peer2, limit)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_saved_name(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
     state
         .db
@@ -590,6 +603,7 @@ fn main() {
             unsubscribe_dm,
             get_global_messages,
             get_messages,
+            get_dm_messages,
             get_saved_name,
             send_file,
             get_file_history,
