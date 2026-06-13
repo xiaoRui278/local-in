@@ -81,7 +81,7 @@ async fn start_node(
                     match db.save_message(&record) {
                         Ok(_) => {
                             tracing::info!("Message saved to DB, emitting event...");
-                            match app_handle.emit("new-message", &record) {
+                            match app_handle.emit_to("main", "new-message", &record) {
                                 Ok(_) => tracing::info!("Event emitted successfully"),
                                 Err(e) => tracing::error!("Failed to emit event: {}", e),
                             }

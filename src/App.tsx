@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -55,6 +55,7 @@ function App() {
   const [input, setInput] = useState("");
   const [selectedPeer, setSelectedPeer] = useState<string | null>(null);
   const [myPeerId, setMyPeerId] = useState("");
+  const myPeerIdRef = useRef("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState("");
@@ -117,52 +118,8 @@ function App() {
   }, [started]);
 
   useEffect(() => {
-    if (started) {
-      const interval = setInterval(async () => {
-        try {
-          const msgs = await invoke<MessageRecord[]>("get_global_messages", { limit: 100 });
-          setGlobalMessages(msgs.reverse());
-        } catch (e) {
-          console.error("Failed to poll messages:", e);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [started]);
-
-  useEffect(() => {
-    if (started && selectedPeer) {
-      const interval = setInterval(async () => {
-        try {
-          const msgs = await invoke<MessageRecord[]>("get_dm_messages", {
-            peer1: myPeerId,
-            peer2: selectedPeer,
-            limit: 100,
-          });
-          setMessages(msgs.reverse());
-        } catch (e) {
-          console.error("Failed to poll DM messages:", e);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [started, selectedPeer, myPeerId]);
-
-  useEffect(() => {
     if (selectedPeer) {
       loadMessages(selectedPeer);
-      // Subscribe to DM topic
-      invoke("subscribe_dm", { peerId: selectedPeer }).catch((e) =>
-        console.error("Failed to subscribe DM:", e)
-      );
-      return () => {
-        // Unsubscribe when closing chat
-        invoke("unsubscribe_dm", { peerId: selectedPeer }).catch((e) =>
-          console.error("Failed to unsubscribe DM:", e)
-        );
-      };
     }
   }, [selectedPeer]);
 
@@ -211,23 +168,19 @@ function App() {
 
   useEffect(() => {
     if (started) {
-      console.log("Setting up message listener");
       const unlisten = listen<MessageRecord>("new-message", (event) => {
         const msg = event.payload;
-        console.log("Received message event:", msg);
         
         if (msg.to_peer === "global") {
-          console.log("Adding to global messages");
           setGlobalMessages((prev) => [...prev, msg]);
         } else {
-          console.log("Adding to private messages");
           setMessages((prev) => [...prev, msg]);
         }
         
         setChatHistory((prev) => {
           const peerId = msg.to_peer === "global" ? "global" : 
-            (msg.from_peer === myPeerId ? msg.to_peer : msg.from_peer);
-          const peerName = msg.from_peer === myPeerId ? "公共频道" : msg.from_name;
+            (msg.from_peer === myPeerIdRef.current ? msg.to_peer : msg.from_peer);
+          const peerName = msg.from_peer === myPeerIdRef.current ? "公共频道" : msg.from_name;
           const isGroup = msg.to_peer.startsWith("group-");
           
           const existing = prev.find((item) => 
@@ -262,11 +215,10 @@ function App() {
         });
       });
       return () => {
-        console.log("Cleaning up message listener");
         unlisten.then((fn) => fn());
       };
     }
-  }, [started, myPeerId]);
+  }, [started]);
 
   const loadSavedConfig = async () => {
     try {
@@ -306,6 +258,7 @@ function App() {
     try {
       const peerId = await invoke<string>("start_node", { name: name.trim() });
       setMyPeerId(peerId);
+      myPeerIdRef.current = peerId;
       setStarted(true);
     } catch (e) {
       console.error("Failed to start node:", e);
