@@ -83,9 +83,24 @@ function App() {
     return localStorage.getItem('font-size') || '14';
   });
 
+  const globalMessagesRef = useRef<HTMLDivElement>(null);
+  const privateMessagesRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     loadSavedConfig();
   }, []);
+
+  useEffect(() => {
+    if (globalMessagesRef.current) {
+      globalMessagesRef.current.scrollTop = globalMessagesRef.current.scrollHeight;
+    }
+  }, [globalMessages]);
+
+  useEffect(() => {
+    if (privateMessagesRef.current) {
+      privateMessagesRef.current.scrollTop = privateMessagesRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     document.body.className = theme;
@@ -209,14 +224,10 @@ function App() {
       const onMessage = new Channel<MessagePayload>();
       onMessage.onmessage = (payload) => {
         const msg = payload.record;
-        console.log("Received message via channel:", msg);
-        console.log("to_peer:", msg.to_peer, "from_peer:", msg.from_peer);
         
-        if (msg.to_peer === "global") {
-          console.log("Adding to global messages");
+        if (msg.to_peer === "global" || msg.to_peer === "") {
           setGlobalMessages((prev) => [...prev, msg]);
-        } else {
-          console.log("Adding to private messages");
+        } else if (msg.to_peer === myPeerIdRef.current || msg.from_peer === myPeerIdRef.current) {
           setMessages((prev) => [...prev, msg]);
         }
         
@@ -831,8 +842,8 @@ function App() {
               </div>
             </div>
 
-            <div className="messages">
-              {messages.map((msg) => (
+            <div className="messages" ref={privateMessagesRef}>
+              {messages.slice(-10).map((msg) => (
                 <div
                   key={msg.id}
                   className={`message ${msg.from_peer === myPeerId ? "sent" : "received"}`}
@@ -903,8 +914,8 @@ function App() {
               </div>
             </div>
 
-            <div className="messages">
-              {globalMessages.map((msg) => (
+            <div className="messages" ref={globalMessagesRef}>
+              {globalMessages.slice(-10).map((msg) => (
                 <div
                   key={msg.id}
                   className={`message ${msg.from_peer === myPeerId ? "sent" : "received"}`}
