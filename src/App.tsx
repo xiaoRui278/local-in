@@ -388,16 +388,22 @@ function App() {
   };
 
   const handleFileSelect = async () => {
-    if (!selectedPeer) return;
+    if (!selectedPeer) {
+      console.log("No peer selected");
+      return;
+    }
 
     try {
+      console.log("Opening file dialog...");
       const file = await open({
         multiple: false,
         filters: [{ name: "All Files", extensions: ["*"] }],
       });
+      console.log("File selected:", file);
 
       if (file) {
         const filePath = typeof file === "string" ? file : (file as { path: string }).path;
+        console.log("Sending file:", filePath);
         await invoke<string>("send_file", {
           peerId: selectedPeer,
           filePath: filePath,
