@@ -247,6 +247,15 @@ impl P2PNode {
                                     if let Some(peer) = peers.get_mut(&update.peer_id) {
                                         peer.name = update.name;
                                         peer.avatar = update.avatar;
+
+                                        let topic = gossipsub::IdentTopic::new("local-in-peers");
+                                        let reply = PeerUpdate {
+                                            peer_id: local_peer_id.clone(),
+                                            name: name.clone(),
+                                            avatar: "🐱".to_string(),
+                                        };
+                                        let data = serde_json::to_vec(&reply).unwrap();
+                                        let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                                     }
                                 }
                             } else if topic_str.starts_with("local-in-group-") {
