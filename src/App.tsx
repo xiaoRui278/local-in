@@ -240,7 +240,7 @@ function App() {
         if (msg.content.startsWith("[FILE]")) {
           const parts = msg.content.substring(6).split("|");
           if (parts.length === 3) {
-            const fileMsg = {
+            const fileMsg: MessageRecord = {
               ...msg,
               content: msg.content,
               file_id: parts[0],
