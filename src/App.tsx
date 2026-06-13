@@ -233,10 +233,27 @@ function App() {
       onMessage.onmessage = (payload) => {
         const msg = payload.record;
         
-        if (msg.to_peer === "global" || msg.to_peer === "") {
-          setGlobalMessages((prev) => [...prev, msg]);
-        } else if (msg.to_peer === myPeerIdRef.current || msg.from_peer === myPeerIdRef.current) {
-          setMessages((prev) => [...prev, msg]);
+        if (msg.content.startsWith("[FILE]")) {
+          const parts = msg.content.substring(6).split("|");
+          if (parts.length === 3) {
+            const fileMsg = {
+              ...msg,
+              content: msg.content,
+              file_id: parts[0],
+              file_name: parts[1],
+              file_size: parseInt(parts[2]),
+              file_status: "pending",
+            };
+            if (msg.to_peer === myPeerIdRef.current) {
+              setMessages((prev) => [...prev, fileMsg]);
+            }
+          }
+        } else {
+          if (msg.to_peer === "global" || msg.to_peer === "") {
+            setGlobalMessages((prev) => [...prev, msg]);
+          } else if (msg.to_peer === myPeerIdRef.current || msg.from_peer === myPeerIdRef.current) {
+            setMessages((prev) => [...prev, msg]);
+          }
         }
         
         if (msg.to_peer !== "global" && msg.to_peer !== "") {
@@ -410,7 +427,22 @@ function App() {
             filePath: filePath,
           });
           console.log("File sent successfully:", result);
-          alert("文件发送成功");
+          
+          const fileName = filePath.split("/").pop() || filePath;
+          const fileMsg = {
+            id: Date.now().toString(),
+            from_peer: myPeerId,
+            from_name: name,
+            to_peer: selectedPeer,
+            content: `[FILE]${result}|${fileName}|0`,
+            timestamp: Math.floor(Date.now() / 1000),
+            is_read: true,
+            file_id: result,
+            file_name: fileName,
+            file_size: 0,
+            file_status: "pending",
+          };
+          setMessages((prev) => [...prev, fileMsg]);
         } catch (e) {
           console.error("Failed to send file:", e);
           alert("发送失败: " + e);
@@ -879,8 +911,48 @@ function App() {
                   key={msg.id}
                   className={`message ${msg.from_peer === myPeerId ? "sent" : "received"}`}
                 >
-                  <div className="message-content">{msg.content}</div>
-                  <div className="message-time">{formatTime(msg.timestamp)}</div>
+                  {msg.content.startsWith("[FILE]") ? (
+                    <div className="file-card">
+                      <div className="file-icon">📎</div>
+                      <div className="file-info">
+                        <div className="file-name">{msg.file_name}</div>
+                        <div className="file-size">{(msg.file_size / 1024 / 1024).toFixed(2)} MB</div>
+                      </div>
+                      {msg.file_status === "pending" && msg.from_peer !== myPeerId && (
+                        <button
+                          className="file-accept-btn"
+                          onClick={async () => {
+                            try {
+                              await invoke("accept_file", {
+                                fileId: msg.file_id,
+                                fromPeer: msg.from_peer,
+                              });
+                              setMessages((prev) =>
+                                prev.map((m) =>
+                                  m.id === msg.id ? { ...m, file_status: "transferring" } : m
+                                )
+                              );
+                            } catch (e) {
+                              console.error("Failed to accept file:", e);
+                            }
+                          }}
+                        >
+                          接收
+                        </button>
+                      )}
+                      {msg.file_status === "transferring" && (
+                        <div className="file-status">传输中...</div>
+                      )}
+                      {msg.file_status === "completed" && (
+                        <div className="file-status">已完成</div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="message-content">{msg.content}</div>
+                      <div className="message-time">{formatTime(msg.timestamp)}</div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

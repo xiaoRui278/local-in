@@ -392,6 +392,21 @@ async fn get_file_history(
 }
 
 #[tauri::command]
+async fn accept_file(
+    state: tauri::State<'_, AppState>,
+    file_id: String,
+    from_peer: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        node.accept_file(&file_id, &from_peer).await?;
+        Ok(())
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
 async fn create_group(
     state: tauri::State<'_, AppState>,
     name: String,
@@ -678,6 +693,7 @@ fn main() {
             get_dm_messages,
             get_saved_name,
             send_file,
+            accept_file,
             get_file_stat,
             get_file_history,
             create_group,
