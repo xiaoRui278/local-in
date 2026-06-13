@@ -259,7 +259,10 @@ impl P2PNode {
                                             peer.name = msg.from_name.clone();
                                         }
                                     }
-                                    let _ = received_msg_tx.try_send(msg);
+                                    match received_msg_tx.try_send(msg) {
+                                        Ok(_) => tracing::info!("Message forwarded to main thread"),
+                                        Err(e) => tracing::error!("Failed to forward message: {}", e),
+                                    }
                                 }
                             } else if topic_str == "local-in-peers" {
                                 if let Ok(update) = serde_json::from_slice::<PeerUpdate>(&message.data) {

@@ -57,7 +57,9 @@ async fn start_node(
     let my_peer_id = peer_id.clone();
 
     tokio::spawn(async move {
+        tracing::info!("Message receiver task started");
         while let Some(msg) = msg_rx.recv().await {
+            tracing::info!("Received message from {}: {}", msg.from, msg.content);
             if msg.from != my_peer_id {
                 let record = MessageRecord {
                     id: uuid::Uuid::new_v4().to_string(),
@@ -67,9 +69,15 @@ async fn start_node(
                     timestamp: msg.timestamp as i64,
                     is_read: false,
                 };
-                let _ = db.save_message(&record);
+                match db.save_message(&record) {
+                    Ok(_) => tracing::info!("Message saved to DB"),
+                    Err(e) => tracing::error!("Failed to save message: {}", e),
+                }
+            } else {
+                tracing::info!("Skipping own message");
             }
         }
+        tracing::info!("Message receiver task ended");
     });
 
     node.broadcast_peer_info().await?;
