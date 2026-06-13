@@ -51,6 +51,8 @@ async fn start_node(
         .set_user_config("name", &name)
         .map_err(|e| e.to_string())?;
 
+    node.broadcast_peer_info().await?;
+
     *node_guard = Some(node);
     Ok(peer_id)
 }

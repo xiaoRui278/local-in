@@ -103,6 +103,9 @@ enum SwarmCommand {
         message: GroupMessage,
         resp: oneshot::Sender<Result<(), String>>,
     },
+    BroadcastPeerInfo {
+        resp: oneshot::Sender<()>,
+    },
     Stop {
         resp: oneshot::Sender<()>,
     },
@@ -132,6 +135,7 @@ impl P2PNode {
             )?
             .with_behaviour(|key| {
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
+                    .validation_mode(gossipsub::ValidationMode::None)
                     .build()
                     .map_err(|e| e.to_string())?;
 
@@ -208,6 +212,14 @@ impl P2PNode {
                                 peers.insert(peer_id.to_string(), info);
                             }
                         }
+                        Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
+                            mdns::Event::Expired(list)
+                        ))) => {
+                            for (peer_id, _multiaddr) in list {
+                                swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                                peers.remove(&peer_id.to_string());
+                            }
+                        }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Gossipsub(
                             gossipsub::Event::Message { message, .. }
                         ))) => {
@@ -215,6 +227,11 @@ impl P2PNode {
                             if topic_str == "local-in-chat" {
                                 if let Ok(msg) = serde_json::from_slice::<ChatMessage>(&message.data) {
                                     tracing::info!("Message from {}: {}", msg.from_name, msg.content);
+                                    if let Some(peer) = peers.get_mut(&msg.from) {
+                                        if peer.name.starts_with("Peer-") {
+                                            peer.name = msg.from_name.clone();
+                                        }
+                                    }
                                 }
                             } else if topic_str == "local-in-peers" {
                                 if let Ok(update) = serde_json::from_slice::<PeerUpdate>(&message.data) {
@@ -332,6 +349,17 @@ impl P2PNode {
                         Some(SwarmCommand::GetPeers { resp }) => {
                             let _ = resp.send(peers.values().cloned().collect());
                         }
+                        Some(SwarmCommand::BroadcastPeerInfo { resp }) => {
+                            let topic = gossipsub::IdentTopic::new("local-in-peers");
+                            let update = PeerUpdate {
+                                peer_id: local_peer_id.clone(),
+                                name: name.clone(),
+                                avatar: "🐱".to_string(),
+                            };
+                            let data = serde_json::to_vec(&update).unwrap();
+                            let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
+                            let _ = resp.send(());
+                        }
                         Some(SwarmCommand::SubscribeGroup { topic, resp }) => {
                             let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
                             let result = swarm
@@ -380,6 +408,17 @@ impl P2PNode {
         let (resp_tx, resp_rx) = oneshot::channel();
         let _ = self.cmd_tx.send(SwarmCommand::GetPeers { resp: resp_tx }).await;
         resp_rx.await.unwrap_or_default()
+    }
+
+    pub async fn broadcast_peer_info(&self) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::BroadcastPeerInfo { resp: resp_tx })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())
     }
 
     pub async fn send_message(&self, _peer_id: &str, content: &str) -> Result<(), String> {
