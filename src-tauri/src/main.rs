@@ -64,11 +64,16 @@ async fn start_node(
             while let Some(msg) = msg_rx.recv().await {
                 tracing::info!("Received message from {}: {}", msg.from, msg.content);
                 if msg.from != my_peer_id {
+                    let to_peer = if msg.to_peer.is_empty() {
+                        "global".to_string()
+                    } else {
+                        msg.to_peer
+                    };
                     let record = MessageRecord {
                         id: uuid::Uuid::new_v4().to_string(),
                         from_peer: msg.from,
                         from_name: msg.from_name,
-                        to_peer: "global".to_string(),
+                        to_peer,
                         content: msg.content,
                         timestamp: msg.timestamp as i64,
                         is_read: false,
@@ -195,6 +200,34 @@ async fn send_global_message(
         };
         state.db.save_message(&msg).map_err(|e| e.to_string())?;
 
+        Ok(())
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
+async fn subscribe_dm(
+    state: tauri::State<'_, AppState>,
+    peer_id: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        node.subscribe_dm(&peer_id).await?;
+        Ok(())
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
+async fn unsubscribe_dm(
+    state: tauri::State<'_, AppState>,
+    peer_id: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        node.unsubscribe_dm(&peer_id).await?;
         Ok(())
     } else {
         Err("Node not started".to_string())
@@ -553,6 +586,8 @@ fn main() {
             get_saved_config,
             send_message,
             send_global_message,
+            subscribe_dm,
+            unsubscribe_dm,
             get_global_messages,
             get_messages,
             get_saved_name,

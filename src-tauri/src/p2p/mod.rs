@@ -25,6 +25,8 @@ pub struct ChatMessage {
     pub from_name: String,
     pub content: String,
     pub timestamp: u64,
+    #[serde(default)]
+    pub to_peer: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +79,7 @@ pub enum GroupMessage {
 #[derive(Debug)]
 enum SwarmCommand {
     SendMessage {
+        to_peer: String,
         content: String,
         resp: oneshot::Sender<Result<(), String>>,
     },
@@ -96,6 +99,14 @@ enum SwarmCommand {
     },
     UnsubscribeGroup {
         topic: String,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    SubscribeDM {
+        peer_id: String,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    UnsubscribeDM {
+        peer_id: String,
         resp: oneshot::Sender<Result<(), String>>,
     },
     SendGroupMessage {
@@ -123,6 +134,12 @@ pub struct P2PNode {
     name: String,
     cmd_tx: mpsc::Sender<SwarmCommand>,
     received_msg_rx: Option<mpsc::Receiver<ChatMessage>>,
+}
+
+fn dm_topic(peer1: &str, peer2: &str) -> String {
+    let mut peers = vec![peer1, peer2];
+    peers.sort();
+    format!("local-in-dm-{}-{}", peers[0], peers[1])
 }
 
 impl P2PNode {
@@ -252,7 +269,7 @@ impl P2PNode {
                             gossipsub::Event::Message { message, .. }
                         ))) => {
                             let topic_str = message.topic.as_str();
-                            if topic_str == "local-in-chat" {
+                            if topic_str == "local-in-chat" || topic_str.starts_with("local-in-dm-") {
                                 if let Ok(msg) = serde_json::from_slice::<ChatMessage>(&message.data) {
                                     tracing::info!("Message from {}: {}", msg.from_name, msg.content);
                                     if let Some(peer) = peers.get_mut(&msg.from) {
@@ -333,8 +350,13 @@ impl P2PNode {
                 }
                 cmd = cmd_rx.recv() => {
                     match cmd {
-                        Some(SwarmCommand::SendMessage { content, resp }) => {
-                            let topic = gossipsub::IdentTopic::new("local-in-chat");
+                        Some(SwarmCommand::SendMessage { to_peer, content, resp }) => {
+                            let topic_str = if to_peer.is_empty() {
+                                "local-in-chat".to_string()
+                            } else {
+                                dm_topic(&local_peer_id, &to_peer)
+                            };
+                            let topic = gossipsub::IdentTopic::new(&topic_str);
                             let msg = ChatMessage {
                                 from: local_peer_id.clone(),
                                 from_name: name.clone(),
@@ -343,6 +365,7 @@ impl P2PNode {
                                     .duration_since(SystemTime::UNIX_EPOCH)
                                     .unwrap()
                                     .as_secs(),
+                                to_peer: to_peer.clone(),
                             };
                             let data = serde_json::to_vec(&msg).unwrap();
                             let result = swarm
@@ -412,6 +435,26 @@ impl P2PNode {
                                 .unsubscribe(&gossipsub_topic);
                             let _ = resp.send(Ok(()));
                         }
+                        Some(SwarmCommand::SubscribeDM { peer_id, resp }) => {
+                            let topic_str = dm_topic(&local_peer_id, &peer_id);
+                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic_str);
+                            let result = swarm
+                                .behaviour_mut()
+                                .gossipsub
+                                .subscribe(&gossipsub_topic)
+                                .map(|_| ())
+                                .map_err(|e| e.to_string());
+                            let _ = resp.send(result);
+                        }
+                        Some(SwarmCommand::UnsubscribeDM { peer_id, resp }) => {
+                            let topic_str = dm_topic(&local_peer_id, &peer_id);
+                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic_str);
+                            let _result = swarm
+                                .behaviour_mut()
+                                .gossipsub
+                                .unsubscribe(&gossipsub_topic);
+                            let _ = resp.send(Ok(()));
+                        }
                         Some(SwarmCommand::SendGroupMessage { topic, message, resp }) => {
                             let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
                             let data = serde_json::to_vec(&message).unwrap();
@@ -459,16 +502,45 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())
     }
 
-    pub async fn send_message(&self, _peer_id: &str, content: &str) -> Result<(), String> {
+    pub async fn send_message(&self, to_peer: &str, content: &str) -> Result<(), String> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.cmd_tx
             .send(SwarmCommand::SendMessage {
+                to_peer: to_peer.to_string(),
                 content: content.to_string(),
                 resp: resp_tx,
             })
             .await
             .map_err(|_| "Failed to send command".to_string())?;
 
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn subscribe_dm(&self, peer_id: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SubscribeDM {
+                peer_id: peer_id.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn unsubscribe_dm(&self, peer_id: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::UnsubscribeDM {
+                peer_id: peer_id.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
         resp_rx
             .await
             .map_err(|_| "Failed to get response".to_string())?

@@ -119,6 +119,16 @@ function App() {
   useEffect(() => {
     if (selectedPeer) {
       loadMessages(selectedPeer);
+      // Subscribe to DM topic
+      invoke("subscribe_dm", { peerId: selectedPeer }).catch((e) =>
+        console.error("Failed to subscribe DM:", e)
+      );
+      return () => {
+        // Unsubscribe when closing chat
+        invoke("unsubscribe_dm", { peerId: selectedPeer }).catch((e) =>
+          console.error("Failed to unsubscribe DM:", e)
+        );
+      };
     }
   }, [selectedPeer]);
 
@@ -170,7 +180,13 @@ function App() {
       const unlisten = listen<MessageRecord>("new-message", (event) => {
         const msg = event.payload;
         if (chatMode === "global" && !selectedPeer) {
-          setGlobalMessages((prev) => [...prev, msg]);
+          if (msg.to_peer === "global") {
+            setGlobalMessages((prev) => [...prev, msg]);
+          }
+        } else if (selectedPeer && msg.to_peer !== "global") {
+          if (msg.from_peer === selectedPeer || msg.to_peer === selectedPeer) {
+            setMessages((prev) => [...prev, msg]);
+          }
         }
       });
       return () => {
