@@ -920,7 +920,7 @@ function App() {
                       <div className="file-icon">📎</div>
                       <div className="file-info">
                         <div className="file-name">{msg.file_name}</div>
-                        <div className="file-size">{(msg.file_size / 1024 / 1024).toFixed(2)} MB</div>
+                        <div className="file-size">{((msg.file_size || 0) / 1024 / 1024).toFixed(2)} MB</div>
                       </div>
                       {msg.file_status === "pending" && msg.from_peer !== myPeerId && (
                         <button
