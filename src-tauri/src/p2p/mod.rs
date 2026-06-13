@@ -193,9 +193,20 @@ impl P2PNode {
         let local_peer_id = swarm.local_peer_id().to_string();
         let mut peers: HashMap<String, PeerInfo> = HashMap::new();
         let mut incoming_files: HashMap<String, Vec<u8>> = HashMap::new();
+        let mut name_broadcast_interval = tokio::time::interval(std::time::Duration::from_secs(5));
 
         loop {
             tokio::select! {
+                _ = name_broadcast_interval.tick() => {
+                    let topic = gossipsub::IdentTopic::new("local-in-peers");
+                    let update = PeerUpdate {
+                        peer_id: local_peer_id.clone(),
+                        name: name.clone(),
+                        avatar: "🐱".to_string(),
+                    };
+                    let data = serde_json::to_vec(&update).unwrap();
+                    let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
+                }
                 event = swarm.next() => {
                     match event {
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
@@ -210,15 +221,6 @@ impl P2PNode {
                                     online: true,
                                 };
                                 peers.insert(peer_id.to_string(), info);
-
-                                let topic = gossipsub::IdentTopic::new("local-in-peers");
-                                let update = PeerUpdate {
-                                    peer_id: local_peer_id.clone(),
-                                    name: name.clone(),
-                                    avatar: "🐱".to_string(),
-                                };
-                                let data = serde_json::to_vec(&update).unwrap();
-                                let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                             }
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
