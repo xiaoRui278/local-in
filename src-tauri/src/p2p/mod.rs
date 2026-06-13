@@ -90,9 +90,15 @@ impl request_response::Codec for ChatCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = vec![0u8; 4096];
-        let n = io.read(&mut buf).await?;
-        buf.truncate(n);
+        let mut buf = Vec::new();
+        let mut temp = [0u8; 8192];
+        loop {
+            let n = io.read(&mut temp).await?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&temp[..n]);
+        }
         serde_json::from_slice(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
@@ -104,9 +110,15 @@ impl request_response::Codec for ChatCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = vec![0u8; 4096];
-        let n = io.read(&mut buf).await?;
-        buf.truncate(n);
+        let mut buf = Vec::new();
+        let mut temp = [0u8; 1024];
+        loop {
+            let n = io.read(&mut temp).await?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&temp[..n]);
+        }
         serde_json::from_slice(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 

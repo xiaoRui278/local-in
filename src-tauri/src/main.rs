@@ -333,6 +333,19 @@ async fn get_saved_name(state: tauri::State<'_, AppState>) -> Result<Option<Stri
 }
 
 #[tauri::command]
+async fn get_file_stat(file_path: String) -> Result<serde_json::Value, String> {
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+    let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "size": metadata.len(),
+        "name": path.file_name().unwrap_or_default().to_string_lossy()
+    }))
+}
+
+#[tauri::command]
 async fn send_file(
     state: tauri::State<'_, AppState>,
     peer_id: String,
@@ -665,6 +678,7 @@ fn main() {
             get_dm_messages,
             get_saved_name,
             send_file,
+            get_file_stat,
             get_file_history,
             create_group,
             join_group,

@@ -403,6 +403,13 @@ function App() {
       if (file) {
         const filePath = typeof file === "string" ? file : (file as { path: string }).path;
         console.log("Sending file:", filePath, "to peer:", selectedPeer);
+        
+        const stat = await invoke<{size: number}>("get_file_stat", { filePath });
+        if (stat.size > 50 * 1024 * 1024) {
+          alert("文件太大，请选择小于50MB的文件");
+          return;
+        }
+        
         try {
           const result = await invoke<string>("send_file", {
             peerId: selectedPeer,
