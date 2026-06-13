@@ -117,6 +117,40 @@ function App() {
   }, [started]);
 
   useEffect(() => {
+    if (started) {
+      const interval = setInterval(async () => {
+        try {
+          const msgs = await invoke<MessageRecord[]>("get_global_messages", { limit: 100 });
+          setGlobalMessages(msgs.reverse());
+        } catch (e) {
+          console.error("Failed to poll messages:", e);
+        }
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [started]);
+
+  useEffect(() => {
+    if (started && selectedPeer) {
+      const interval = setInterval(async () => {
+        try {
+          const msgs = await invoke<MessageRecord[]>("get_dm_messages", {
+            peer1: myPeerId,
+            peer2: selectedPeer,
+            limit: 100,
+          });
+          setMessages(msgs.reverse());
+        } catch (e) {
+          console.error("Failed to poll DM messages:", e);
+        }
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [started, selectedPeer, myPeerId]);
+
+  useEffect(() => {
     if (selectedPeer) {
       loadMessages(selectedPeer);
       // Subscribe to DM topic
