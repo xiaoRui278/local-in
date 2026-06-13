@@ -397,7 +397,6 @@ function App() {
       console.log("Opening file dialog...");
       const file = await open({
         multiple: false,
-        filters: [{ name: "All Files", extensions: ["*"] }],
       });
       console.log("File selected:", file);
 
