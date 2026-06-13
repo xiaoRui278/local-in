@@ -122,6 +122,7 @@ pub struct P2PNode {
     #[allow(dead_code)]
     name: String,
     cmd_tx: mpsc::Sender<SwarmCommand>,
+    pub received_msg_rx: mpsc::Receiver<ChatMessage>,
 }
 
 impl P2PNode {
@@ -172,22 +173,25 @@ impl P2PNode {
         swarm.listen_on(addr)?;
 
         let (cmd_tx, cmd_rx) = mpsc::channel(32);
+        let (received_msg_tx, received_msg_rx) = mpsc::channel(256);
 
         let node_name = name.clone();
         tokio::spawn(async move {
-            Self::run_swarm_loop(swarm, cmd_rx, node_name).await;
+            Self::run_swarm_loop(swarm, cmd_rx, received_msg_tx, node_name).await;
         });
 
         Ok(Self {
             peer_id,
             name,
             cmd_tx,
+            received_msg_rx,
         })
     }
 
     async fn run_swarm_loop(
         mut swarm: libp2p::Swarm<LocalInBehaviour>,
         mut cmd_rx: mpsc::Receiver<SwarmCommand>,
+        received_msg_tx: mpsc::Sender<ChatMessage>,
         name: String,
     ) {
         let local_peer_id = swarm.local_peer_id().to_string();
@@ -255,6 +259,7 @@ impl P2PNode {
                                             peer.name = msg.from_name.clone();
                                         }
                                     }
+                                    let _ = received_msg_tx.try_send(msg);
                                 }
                             } else if topic_str == "local-in-peers" {
                                 if let Ok(update) = serde_json::from_slice::<PeerUpdate>(&message.data) {
@@ -427,6 +432,11 @@ impl P2PNode {
 
     pub fn peer_id(&self) -> String {
         self.peer_id.clone()
+    }
+
+    pub fn take_message_receiver(&mut self) -> mpsc::Receiver<ChatMessage> {
+        let (_tx, rx) = mpsc::channel(256);
+        std::mem::replace(&mut self.received_msg_rx, rx)
     }
 
     pub async fn get_peers(&self) -> Vec<PeerInfo> {

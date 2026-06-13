@@ -63,6 +63,7 @@ function App() {
   const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [groupMessages, setGroupMessages] = useState<GroupMessageRecord[]>([]);
+  const [globalMessages, setGlobalMessages] = useState<MessageRecord[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -161,6 +162,14 @@ function App() {
     }
   }, [selectedGroup, chatMode]);
 
+  useEffect(() => {
+    if (chatMode === "global" && !selectedPeer) {
+      loadGlobalMessages();
+      const interval = setInterval(loadGlobalMessages, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [chatMode, selectedPeer]);
+
   const loadSavedConfig = async () => {
     try {
       const [savedName, _savedAvatar] = await invoke<[string | null, string | null]>("get_saved_config");
@@ -179,6 +188,17 @@ function App() {
       setMessages(msgs.reverse());
     } catch (e) {
       console.error("Failed to load messages:", e);
+    }
+  };
+
+  const loadGlobalMessages = async () => {
+    try {
+      const msgs = await invoke<MessageRecord[]>("get_global_messages", {
+        limit: 100,
+      });
+      setGlobalMessages(msgs.reverse());
+    } catch (e) {
+      console.error("Failed to load global messages:", e);
     }
   };
 
@@ -247,6 +267,30 @@ function App() {
       setInput("");
     } catch (e) {
       console.error("Failed to send message:", e);
+    }
+  };
+
+  const handleSendGlobalMessage = async () => {
+    if (!input.trim()) return;
+    try {
+      await invoke("send_global_message", {
+        from: myPeerId,
+        content: input.trim(),
+      });
+      setGlobalMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          from_peer: myPeerId,
+          to_peer: "global",
+          content: input.trim(),
+          timestamp: Math.floor(Date.now() / 1000),
+          is_read: true,
+        },
+      ]);
+      setInput("");
+    } catch (e) {
+      console.error("Failed to send global message:", e);
     }
   };
 
@@ -757,6 +801,78 @@ function App() {
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
               />
               <button className="send-btn" onClick={handleSend}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </>
+        ) : chatMode === "global" ? (
+          <>
+            <div className="chat-header">
+              <div className="chat-user">
+                <div
+                  className="avatar-sm"
+                  style={{
+                    background: "linear-gradient(135deg, #06B6D4, #0EA5E9)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3>公共频道</h3>
+                  <span className="status-text">{peers.length} 在线</span>
+                </div>
+              </div>
+              <div className="header-actions">
+                <button
+                  className="icon-btn"
+                  onClick={() => setShowMembers(!showMembers)}
+                  title={showMembers ? "隐藏成员" : "显示成员"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="messages">
+              {globalMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message ${msg.from_peer === myPeerId ? "sent" : "received"}`}
+                >
+                  {msg.from_peer !== myPeerId && (
+                    <div className="message-sender">
+                      {peers.find((p) => p.peer_id === msg.from_peer)?.name || msg.from_peer.slice(0, 8)}
+                    </div>
+                  )}
+                  <div className="message-content">{msg.content}</div>
+                  <div className="message-time">{formatTime(msg.timestamp)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="input-area">
+              <input
+                type="text"
+                placeholder="输入消息..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendGlobalMessage()}
+              />
+              <button className="send-btn" onClick={handleSendGlobalMessage}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

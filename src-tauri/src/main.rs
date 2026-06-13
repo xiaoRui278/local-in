@@ -1,6 +1,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
@@ -13,7 +14,7 @@ use p2p::{P2PNode, GroupMessage};
 
 struct AppState {
     node: Mutex<Option<P2PNode>>,
-    db: Database,
+    db: Arc<Database>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,7 +40,7 @@ async fn start_node(
     name: String,
 ) -> Result<String, String> {
     let mut node_guard = state.node.lock().await;
-    let node = P2PNode::new(name.clone()).await.map_err(|e| e.to_string())?;
+    let mut node = P2PNode::new(name.clone()).await.map_err(|e| e.to_string())?;
     let peer_id = node.peer_id();
 
     state
@@ -50,6 +51,26 @@ async fn start_node(
         .db
         .set_user_config("name", &name)
         .map_err(|e| e.to_string())?;
+
+    let db = state.db.clone();
+    let mut msg_rx = node.take_message_receiver();
+    let my_peer_id = peer_id.clone();
+
+    tokio::spawn(async move {
+        while let Some(msg) = msg_rx.recv().await {
+            if msg.from != my_peer_id {
+                let record = MessageRecord {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    from_peer: msg.from,
+                    to_peer: "global".to_string(),
+                    content: msg.content,
+                    timestamp: msg.timestamp as i64,
+                    is_read: false,
+                };
+                let _ = db.save_message(&record);
+            }
+        }
+    });
 
     node.broadcast_peer_info().await?;
 
@@ -132,6 +153,43 @@ async fn send_message(
     } else {
         Err("Node not started".to_string())
     }
+}
+
+#[tauri::command]
+async fn send_global_message(
+    state: tauri::State<'_, AppState>,
+    from: String,
+    content: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        node.send_message("", &content).await?;
+
+        let msg = MessageRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            from_peer: from,
+            to_peer: "global".to_string(),
+            content,
+            timestamp: chrono::Utc::now().timestamp(),
+            is_read: true,
+        };
+        state.db.save_message(&msg).map_err(|e| e.to_string())?;
+
+        Ok(())
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_global_messages(
+    state: tauri::State<'_, AppState>,
+    limit: i64,
+) -> Result<Vec<MessageRecord>, String> {
+    state
+        .db
+        .get_messages("global", limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -460,7 +518,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let db = Database::new(&app.handle()).expect("Failed to initialize database");
+            let db = Arc::new(Database::new(&app.handle()).expect("Failed to initialize database"));
             app.manage(AppState {
                 node: Mutex::new(None),
                 db,
@@ -474,6 +532,8 @@ fn main() {
             update_avatar,
             get_saved_config,
             send_message,
+            send_global_message,
+            get_global_messages,
             get_messages,
             get_saved_name,
             send_file,
