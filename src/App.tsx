@@ -402,14 +402,24 @@ function App() {
 
       if (file) {
         const filePath = typeof file === "string" ? file : (file as { path: string }).path;
-        console.log("Sending file:", filePath);
-        await invoke<string>("send_file", {
-          peerId: selectedPeer,
-          filePath: filePath,
-        });
+        console.log("Sending file:", filePath, "to peer:", selectedPeer);
+        try {
+          const result = await invoke<string>("send_file", {
+            peerId: selectedPeer,
+            filePath: filePath,
+          });
+          console.log("File sent successfully:", result);
+          alert("文件发送成功");
+        } catch (e) {
+          console.error("Failed to send file:", e);
+          alert("发送失败: " + e);
+        }
+      } else {
+        console.log("No file selected");
       }
     } catch (e) {
-      console.error("Failed to send file:", e);
+      console.error("Failed to open dialog:", e);
+      alert("打开对话框失败: " + e);
     }
   };
 
