@@ -210,6 +210,15 @@ impl P2PNode {
                                     online: true,
                                 };
                                 peers.insert(peer_id.to_string(), info);
+
+                                let topic = gossipsub::IdentTopic::new("local-in-peers");
+                                let update = PeerUpdate {
+                                    peer_id: local_peer_id.clone(),
+                                    name: name.clone(),
+                                    avatar: "🐱".to_string(),
+                                };
+                                let data = serde_json::to_vec(&update).unwrap();
+                                let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                             }
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
