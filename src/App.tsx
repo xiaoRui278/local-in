@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 interface Peer {
@@ -45,6 +44,11 @@ interface ChatHistoryItem {
   type: "private" | "group";
   group_id?: string;
   member_count?: number;
+}
+
+interface MessagePayload {
+  record: MessageRecord;
+  is_new: boolean;
 }
 
 function App() {
@@ -166,10 +170,45 @@ function App() {
     }
   }, [selectedGroup, chatMode]);
 
-  useEffect(() => {
-    if (started) {
-      const unlisten = listen<MessageRecord>("new-message", (event) => {
-        const msg = event.payload;
+  const loadSavedConfig = async () => {
+    try {
+      const [savedName, _savedAvatar] = await invoke<[string | null, string | null]>("get_saved_config");
+      if (savedName) setName(savedName);
+    } catch (e) {
+      console.error("Failed to load config:", e);
+    }
+  };
+
+  const loadMessages = async (peerId: string) => {
+    try {
+      const msgs = await invoke<MessageRecord[]>("get_dm_messages", {
+        peer1: myPeerId,
+        peer2: peerId,
+        limit: 100,
+      });
+      setMessages(msgs.reverse());
+    } catch (e) {
+      console.error("Failed to load messages:", e);
+    }
+  };
+
+  const loadGlobalMessages = async () => {
+    try {
+      const msgs = await invoke<MessageRecord[]>("get_global_messages", {
+        limit: 100,
+      });
+      setGlobalMessages(msgs.reverse());
+    } catch (e) {
+      console.error("Failed to load global messages:", e);
+    }
+  };
+
+  const handleStart = async () => {
+    if (!name.trim()) return;
+    try {
+      const onMessage = new Channel<MessagePayload>();
+      onMessage.onmessage = (payload) => {
+        const msg = payload.record;
         
         if (msg.to_peer === "global") {
           setGlobalMessages((prev) => [...prev, msg]);
@@ -213,50 +252,9 @@ function App() {
             );
           }
         });
-      });
-      return () => {
-        unlisten.then((fn) => fn());
       };
-    }
-  }, [started]);
 
-  const loadSavedConfig = async () => {
-    try {
-      const [savedName, _savedAvatar] = await invoke<[string | null, string | null]>("get_saved_config");
-      if (savedName) setName(savedName);
-    } catch (e) {
-      console.error("Failed to load config:", e);
-    }
-  };
-
-  const loadMessages = async (peerId: string) => {
-    try {
-      const msgs = await invoke<MessageRecord[]>("get_dm_messages", {
-        peer1: myPeerId,
-        peer2: peerId,
-        limit: 100,
-      });
-      setMessages(msgs.reverse());
-    } catch (e) {
-      console.error("Failed to load messages:", e);
-    }
-  };
-
-  const loadGlobalMessages = async () => {
-    try {
-      const msgs = await invoke<MessageRecord[]>("get_global_messages", {
-        limit: 100,
-      });
-      setGlobalMessages(msgs.reverse());
-    } catch (e) {
-      console.error("Failed to load global messages:", e);
-    }
-  };
-
-  const handleStart = async () => {
-    if (!name.trim()) return;
-    try {
-      const peerId = await invoke<string>("start_node", { name: name.trim() });
+      const peerId = await invoke<string>("start_node", { name: name.trim(), onMessage });
       setMyPeerId(peerId);
       myPeerIdRef.current = peerId;
       setStarted(true);

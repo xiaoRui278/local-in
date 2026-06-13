@@ -12,6 +12,12 @@ mod p2p;
 use db::{Database, MessageRecord, GroupRecord, GroupMemberRecord, GroupMessageRecord};
 use p2p::{P2PNode, GroupMessage};
 
+#[derive(Clone, Serialize)]
+struct MessagePayload {
+    record: MessageRecord,
+    is_new: bool,
+}
+
 struct AppState {
     node: Mutex<Option<P2PNode>>,
     db: Arc<Database>,
@@ -39,6 +45,7 @@ async fn start_node(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     name: String,
+    on_message: tauri::ipc::Channel<MessagePayload>,
 ) -> Result<String, String> {
     let mut node_guard = state.node.lock().await;
     let mut node = P2PNode::new(name.clone()).await.map_err(|e| e.to_string())?;
@@ -58,7 +65,6 @@ async fn start_node(
     let my_peer_id = peer_id.clone();
 
     if let Some(mut msg_rx) = msg_rx {
-        let app_handle = app.clone();
         tokio::spawn(async move {
             tracing::info!("Message receiver task started");
             while let Some(msg) = msg_rx.recv().await {
@@ -80,10 +86,15 @@ async fn start_node(
                     };
                     match db.save_message(&record) {
                         Ok(_) => {
-                            tracing::info!("Message saved to DB, emitting event...");
-                            match app_handle.emit_to("main", "new-message", &record) {
-                                Ok(_) => tracing::info!("Event emitted successfully"),
-                                Err(e) => tracing::error!("Failed to emit event: {}", e),
+                            tracing::info!("Message saved to DB, sending via channel...");
+                            let payload = MessagePayload {
+                                record,
+                                is_new: true,
+                            };
+                            if let Err(e) = on_message.send(payload) {
+                                tracing::error!("Failed to send via channel: {}", e);
+                            } else {
+                                tracing::info!("Message sent via channel successfully");
                             }
                         }
                         Err(e) => tracing::error!("Failed to save message: {}", e),
