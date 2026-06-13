@@ -231,42 +231,43 @@ function App() {
           setMessages((prev) => [...prev, msg]);
         }
         
-        setChatHistory((prev) => {
-          const peerId = msg.to_peer === "global" ? "global" : 
-            (msg.from_peer === myPeerIdRef.current ? msg.to_peer : msg.from_peer);
-          const peerName = msg.from_peer === myPeerIdRef.current ? "公共频道" : msg.from_name;
-          const isGroup = msg.to_peer.startsWith("group-");
-          
-          const existing = prev.find((item) => 
-            isGroup ? item.group_id === msg.to_peer : item.peer_id === peerId
-          );
-          
-          if (existing) {
-            return prev
-              .map((item) =>
-                item.peer_id === peerId || item.group_id === msg.to_peer
-                  ? {
-                      ...item,
-                      last_message: msg.content,
-                      last_message_time: msg.timestamp,
-                    }
-                  : item
-              )
-              .sort((a, b) => b.last_message_time - a.last_message_time);
-          } else {
-            const newItem: ChatHistoryItem = {
-              peer_id: peerId,
-              peer_name: peerName,
-              last_message: msg.content,
-              last_message_time: msg.timestamp,
-              type: isGroup ? "group" : "private",
-              group_id: isGroup ? msg.to_peer : undefined,
-            };
-            return [newItem, ...prev].sort(
-              (a, b) => b.last_message_time - a.last_message_time
+        if (msg.to_peer !== "global" && msg.to_peer !== "") {
+          setChatHistory((prev) => {
+            const peerId = msg.from_peer === myPeerIdRef.current ? msg.to_peer : msg.from_peer;
+            const peerName = msg.from_name;
+            const isGroup = msg.to_peer.startsWith("group-");
+            
+            const existing = prev.find((item) => 
+              isGroup ? item.group_id === msg.to_peer : item.peer_id === peerId
             );
-          }
-        });
+            
+            if (existing) {
+              return prev
+                .map((item) =>
+                  item.peer_id === peerId || item.group_id === msg.to_peer
+                    ? {
+                        ...item,
+                        last_message: msg.content,
+                        last_message_time: msg.timestamp,
+                      }
+                    : item
+                )
+                .sort((a, b) => b.last_message_time - a.last_message_time);
+            } else {
+              const newItem: ChatHistoryItem = {
+                peer_id: peerId,
+                peer_name: peerName,
+                last_message: msg.content,
+                last_message_time: msg.timestamp,
+                type: isGroup ? "group" : "private",
+                group_id: isGroup ? msg.to_peer : undefined,
+              };
+              return [newItem, ...prev].sort(
+                (a, b) => b.last_message_time - a.last_message_time
+              );
+            }
+          });
+        }
       };
 
       const peerId = await invoke<string>("start_node", { name: name.trim(), onMessage });
