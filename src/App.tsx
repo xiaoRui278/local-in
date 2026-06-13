@@ -177,12 +177,16 @@ function App() {
 
   useEffect(() => {
     if (started) {
+      console.log("Setting up message listener");
       const unlisten = listen<MessageRecord>("new-message", (event) => {
         const msg = event.payload;
+        console.log("Received message event:", msg);
         
         if (msg.to_peer === "global") {
+          console.log("Adding to global messages");
           setGlobalMessages((prev) => [...prev, msg]);
         } else {
+          console.log("Adding to private messages");
           setMessages((prev) => [...prev, msg]);
         }
         
@@ -224,6 +228,7 @@ function App() {
         });
       });
       return () => {
+        console.log("Cleaning up message listener");
         unlisten.then((fn) => fn());
       };
     }
