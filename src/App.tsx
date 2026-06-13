@@ -433,7 +433,7 @@ function App() {
           console.log("File sent successfully:", result);
           
           const fileName = filePath.split("/").pop() || filePath;
-          const fileMsg = {
+          const fileMsg: MessageRecord = {
             id: Date.now().toString(),
             from_peer: myPeerId,
             from_name: name,
