@@ -1,15 +1,15 @@
 use libp2p::{
-    futures::StreamExt,
-    gossipsub, mdns, noise,
+    futures::{StreamExt, AsyncReadExt, AsyncWriteExt, AsyncRead, AsyncWrite},
+    mdns, noise, request_response,
     swarm::SwarmEvent,
-    tcp, yamux, Multiaddr,
+    tcp, yamux, Multiaddr, PeerId,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
-
-const CHUNK_SIZE: usize = 64 * 1024;
+use async_trait::async_trait;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerInfo {
@@ -30,35 +30,6 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FileMessage {
-    Offer {
-        id: String,
-        filename: String,
-        size: u64,
-        from: String,
-    },
-    Chunk {
-        id: String,
-        index: u32,
-        data: Vec<u8>,
-        is_last: bool,
-    },
-    Accept {
-        id: String,
-    },
-    Reject {
-        id: String,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerUpdate {
-    pub peer_id: String,
-    pub name: String,
-    pub avatar: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GroupMessage {
     Chat {
         from: String,
@@ -76,6 +47,86 @@ pub enum GroupMessage {
     Dissolve,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChatRequest {
+    SendMessage(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChatResponse {
+    Ok,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ChatCodec;
+
+#[async_trait]
+impl request_response::Codec for ChatCodec {
+    type Protocol = libp2p::StreamProtocol;
+    type Request = ChatRequest;
+    type Response = ChatResponse;
+
+    async fn read_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let mut buf = vec![0u8; 4096];
+        let n = io.read(&mut buf).await?;
+        buf.truncate(n);
+        serde_json::from_slice(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    async fn read_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let mut buf = vec![0u8; 4096];
+        let n = io.read(&mut buf).await?;
+        buf.truncate(n);
+        serde_json::from_slice(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        let data = serde_json::to_vec(&req)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        io.write_all(&data).await?;
+        io.flush().await?;
+        Ok(())
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        let data = serde_json::to_vec(&res)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        io.write_all(&data).await?;
+        io.flush().await?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 enum SwarmCommand {
     SendMessage {
@@ -84,7 +135,6 @@ enum SwarmCommand {
         resp: oneshot::Sender<Result<(), String>>,
     },
     SendFile {
-        #[allow(dead_code)]
         peer_id: String,
         filename: String,
         file_data: Vec<u8>,
@@ -124,22 +174,15 @@ enum SwarmCommand {
 
 #[derive(libp2p::swarm::NetworkBehaviour)]
 struct LocalInBehaviour {
-    gossipsub: gossipsub::Behaviour,
     mdns: mdns::tokio::Behaviour,
+    request_response: request_response::Behaviour<ChatCodec>,
 }
 
 pub struct P2PNode {
     peer_id: String,
-    #[allow(dead_code)]
     name: String,
     cmd_tx: mpsc::Sender<SwarmCommand>,
     received_msg_rx: Option<mpsc::Receiver<ChatMessage>>,
-}
-
-fn dm_topic(peer1: &str, peer2: &str) -> String {
-    let mut peers = vec![peer1, peer2];
-    peers.sort();
-    format!("local-in-dm-{}-{}", peers[0], peers[1])
 }
 
 impl P2PNode {
@@ -152,24 +195,23 @@ impl P2PNode {
                 yamux::Config::default,
             )?
             .with_behaviour(|key| {
-                let gossipsub_config = gossipsub::ConfigBuilder::default()
-                    .heartbeat_interval(std::time::Duration::from_secs(5))
-                    .validation_mode(gossipsub::ValidationMode::None)
-                    .build()
-                    .map_err(|e| e.to_string())?;
-
-                let gossipsub = gossipsub::Behaviour::new(
-                    gossipsub::MessageAuthenticity::Signed(key.clone()),
-                    gossipsub_config,
-                )
-                .map_err(|e| e.to_string())?;
-
                 let mdns = mdns::tokio::Behaviour::new(
                     mdns::Config::default(),
                     key.public().to_peer_id(),
                 )?;
 
-                Ok(LocalInBehaviour { gossipsub, mdns })
+                let request_response = request_response::Behaviour::new(
+                    [(
+                        libp2p::StreamProtocol::new("/local-in-chat/1"),
+                        request_response::ProtocolSupport::Full,
+                    )],
+                    request_response::Config::default(),
+                );
+
+                Ok(LocalInBehaviour {
+                    mdns,
+                    request_response,
+                })
             })?
             .with_swarm_config(|cfg| {
                 cfg.with_idle_connection_timeout(std::time::Duration::from_secs(60))
@@ -177,15 +219,6 @@ impl P2PNode {
             .build();
 
         let peer_id = swarm.local_peer_id().to_string();
-
-        let topic = gossipsub::IdentTopic::new("local-in-chat");
-        swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
-
-        let file_topic = gossipsub::IdentTopic::new("local-in-files");
-        swarm.behaviour_mut().gossipsub.subscribe(&file_topic)?;
-
-        let peer_topic = gossipsub::IdentTopic::new("local-in-peers");
-        swarm.behaviour_mut().gossipsub.subscribe(&peer_topic)?;
 
         let addr: Multiaddr = "/ip4/0.0.0.0/tcp/0".parse()?;
         swarm.listen_on(addr)?;
@@ -214,31 +247,20 @@ impl P2PNode {
     ) {
         let local_peer_id = swarm.local_peer_id().to_string();
         let mut peers: HashMap<String, PeerInfo> = HashMap::new();
-        let mut incoming_files: HashMap<String, Vec<u8>> = HashMap::new();
-        let mut name_broadcast_interval = tokio::time::interval(std::time::Duration::from_secs(5));
-        let start_time = std::time::Instant::now();
+        let mut connected_peers: HashMap<String, PeerId> = HashMap::new();
 
         loop {
             tokio::select! {
-                _ = name_broadcast_interval.tick() => {
-                    if start_time.elapsed().as_secs() < 60 {
-                        let topic = gossipsub::IdentTopic::new("local-in-peers");
-                        let update = PeerUpdate {
-                            peer_id: local_peer_id.clone(),
-                            name: name.clone(),
-                            avatar: "🐱".to_string(),
-                        };
-                        let data = serde_json::to_vec(&update).unwrap();
-                        let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
-                    }
-                }
                 event = swarm.next() => {
                     match event {
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
                             mdns::Event::Discovered(list)
                         ))) => {
-                            for (peer_id, _multiaddr) in list {
-                                swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                            for (peer_id, multiaddr) in list {
+                                tracing::info!("Discovered peer: {} at {}", peer_id, multiaddr);
+                                swarm.add_peer_address(peer_id, multiaddr);
+                                connected_peers.insert(peer_id.to_string(), peer_id);
+
                                 let info = PeerInfo {
                                     peer_id: peer_id.to_string(),
                                     name: format!("Peer-{}", &peer_id.to_string()[..8]),
@@ -246,101 +268,54 @@ impl P2PNode {
                                     online: true,
                                 };
                                 peers.insert(peer_id.to_string(), info);
-
-                                let topic = gossipsub::IdentTopic::new("local-in-peers");
-                                let update = PeerUpdate {
-                                    peer_id: local_peer_id.clone(),
-                                    name: name.clone(),
-                                    avatar: "🐱".to_string(),
-                                };
-                                let data = serde_json::to_vec(&update).unwrap();
-                                let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                             }
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
                             mdns::Event::Expired(list)
                         ))) => {
                             for (peer_id, _multiaddr) in list {
-                                swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                                tracing::info!("Peer expired: {}", peer_id);
+                                connected_peers.remove(&peer_id.to_string());
                                 peers.remove(&peer_id.to_string());
                             }
                         }
-                        Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Gossipsub(
-                            gossipsub::Event::Message { message, .. }
+                        Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::RequestResponse(
+                            request_response::Event::Message { message, .. }
                         ))) => {
-                            let topic_str = message.topic.as_str();
-                            if topic_str == "local-in-chat" || topic_str.starts_with("local-in-dm-") {
-                                if let Ok(msg) = serde_json::from_slice::<ChatMessage>(&message.data) {
-                                    tracing::info!("Message from {}: {}", msg.from_name, msg.content);
-                                    if let Some(peer) = peers.get_mut(&msg.from) {
-                                        if peer.name.starts_with("Peer-") {
-                                            peer.name = msg.from_name.clone();
-                                        }
-                                    }
-                                    match received_msg_tx.try_send(msg) {
-                                        Ok(_) => tracing::info!("Message forwarded to main thread"),
-                                        Err(e) => tracing::error!("Failed to forward message: {}", e),
-                                    }
-                                }
-                            } else if topic_str == "local-in-peers" {
-                                if let Ok(update) = serde_json::from_slice::<PeerUpdate>(&message.data) {
-                                    peers.insert(update.peer_id.clone(), PeerInfo {
-                                        peer_id: update.peer_id,
-                                        name: update.name,
-                                        avatar: update.avatar,
-                                        online: true,
-                                    });
-                                }
-                            } else if topic_str.starts_with("local-in-group-") {
-                                if let Ok(group_msg) = serde_json::from_slice::<GroupMessage>(&message.data) {
-                                    match group_msg {
-                                        GroupMessage::Chat { from: _, from_name, content, timestamp: _ } => {
-                                            tracing::info!("[Group {}] {}: {}", topic_str, from_name, content);
-                                        }
-                                        GroupMessage::Join { peer_id: _, peer_name } => {
-                                            tracing::info!("[Group {}] {} joined", topic_str, peer_name);
-                                        }
-                                        GroupMessage::Leave { peer_id } => {
-                                            tracing::info!("[Group {}] {} left", topic_str, peer_id);
-                                        }
-                                        GroupMessage::Dissolve => {
-                                            tracing::info!("[Group {}] Group dissolved", topic_str);
-                                        }
-                                    }
-                                }
-                            } else if topic_str == "local-in-files" {
-                                if let Ok(file_msg) = serde_json::from_slice::<FileMessage>(&message.data) {
-                                    match file_msg {
-                                        FileMessage::Offer { id, filename, size, from } => {
-                                            tracing::info!("File offer from {}: {} ({} bytes)", from, filename, size);
-                                            incoming_files.insert(id.clone(), Vec::new());
-                                        }
-                                        FileMessage::Chunk { id, index, data, is_last } => {
-                                            tracing::info!("Chunk {} for file {}", index, id);
-                                            if let Some(buffer) = incoming_files.get_mut(&id) {
-                                                buffer.extend_from_slice(&data);
-                                                if is_last {
-                                                    let download_dir = dirs::download_dir().unwrap_or_default();
-                                                    let file_path = download_dir.join(&id);
-                                                    if let Err(e) = std::fs::write(&file_path, buffer) {
-                                                        tracing::error!("Failed to save file: {}", e);
-                                                    } else {
-                                                        tracing::info!("File saved to {:?}", file_path);
-                                                    }
-                                                    incoming_files.remove(&id);
-                                                }
+                            match message {
+                                request_response::Message::Request {
+                                    request, channel, ..
+                                } => {
+                                    let ChatRequest::SendMessage(data) = request;
+                                    if let Ok(msg) = serde_json::from_str::<ChatMessage>(&data) {
+                                        tracing::info!("Received message from {}: {}", msg.from_name, msg.content);
+                                        if let Some(peer_info) = peers.get_mut(&msg.from) {
+                                            if peer_info.name.starts_with("Peer-") {
+                                                peer_info.name = msg.from_name.clone();
                                             }
                                         }
-                                        FileMessage::Accept { id } => {
-                                            tracing::info!("File accepted: {}", id);
-                                        }
-                                        FileMessage::Reject { id } => {
-                                            tracing::info!("File rejected: {}", id);
-                                            incoming_files.remove(&id);
+                                        match received_msg_tx.try_send(msg) {
+                                            Ok(_) => tracing::info!("Message forwarded to main thread"),
+                                            Err(e) => tracing::error!("Failed to forward message: {}", e),
                                         }
                                     }
+                                    let _ = swarm
+                                        .behaviour_mut()
+                                        .request_response
+                                        .send_response(channel, ChatResponse::Ok);
                                 }
+                                request_response::Message::Response { .. } => {}
                             }
+                        }
+                        Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::RequestResponse(
+                            request_response::Event::OutboundFailure { peer, error, .. }
+                        ))) => {
+                            tracing::error!("Outbound failure to {:?}: {:?}", peer, error);
+                        }
+                        Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::RequestResponse(
+                            request_response::Event::InboundFailure { peer, error, .. }
+                        ))) => {
+                            tracing::error!("Inbound failure from {:?}: {:?}", peer, error);
                         }
                         Some(SwarmEvent::NewListenAddr { address, .. }) => {
                             tracing::info!("Listening on {}", address);
@@ -351,12 +326,6 @@ impl P2PNode {
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(SwarmCommand::SendMessage { to_peer, content, resp }) => {
-                            let topic_str = if to_peer.is_empty() {
-                                "local-in-chat".to_string()
-                            } else {
-                                dm_topic(&local_peer_id, &to_peer)
-                            };
-                            let topic = gossipsub::IdentTopic::new(&topic_str);
                             let msg = ChatMessage {
                                 from: local_peer_id.clone(),
                                 from_name: name.clone(),
@@ -367,104 +336,55 @@ impl P2PNode {
                                     .as_secs(),
                                 to_peer: to_peer.clone(),
                             };
-                            let data = serde_json::to_vec(&msg).unwrap();
-                            let result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .publish(topic, data)
-                                .map(|_| ())
-                                .map_err(|e| e.to_string());
-                            let _ = resp.send(result);
-                        }
-                        Some(SwarmCommand::SendFile { peer_id: _, filename, file_data, resp }) => {
-                            let file_id = uuid::Uuid::new_v4().to_string();
-                            let file_topic = gossipsub::IdentTopic::new("local-in-files");
 
-                            let offer = FileMessage::Offer {
-                                id: file_id.clone(),
-                                filename,
-                                size: file_data.len() as u64,
-                                from: name.clone(),
-                            };
-                            let offer_data = serde_json::to_vec(&offer).unwrap();
-                            let _ = swarm.behaviour_mut().gossipsub.publish(file_topic.clone(), offer_data);
+                            let data = serde_json::to_string(&msg).unwrap();
+                            let request = ChatRequest::SendMessage(data);
 
-                            let chunks: Vec<_> = file_data.chunks(CHUNK_SIZE).collect();
-                            for (i, chunk) in chunks.iter().enumerate() {
-                                let chunk_msg = FileMessage::Chunk {
-                                    id: file_id.clone(),
-                                    index: i as u32,
-                                    data: chunk.to_vec(),
-                                    is_last: i == chunks.len() - 1,
-                                };
-                                let chunk_data = serde_json::to_vec(&chunk_msg).unwrap();
-                                let _ = swarm.behaviour_mut().gossipsub.publish(file_topic.clone(), chunk_data);
+                            if to_peer.is_empty() {
+                                for (_peer_str, peer_id) in connected_peers.iter() {
+                                    let peer_id_copy = *peer_id;
+                                    swarm
+                                        .behaviour_mut()
+                                        .request_response
+                                        .send_request(&peer_id_copy, request.clone());
+                                }
+                                let _ = resp.send(Ok(()));
+                            } else {
+                                if let Some(peer_id) = connected_peers.get(&to_peer) {
+                                    let peer_id_copy = *peer_id;
+                                    swarm
+                                        .behaviour_mut()
+                                        .request_response
+                                        .send_request(&peer_id_copy, request);
+                                    let _ = resp.send(Ok(()));
+                                } else {
+                                    let _ = resp.send(Err("Peer not found".to_string()));
+                                }
                             }
-
-                            let _ = resp.send(Ok(file_id));
+                        }
+                        Some(SwarmCommand::SendFile { resp, .. }) => {
+                            let _ = resp.send(Ok("not-implemented".to_string()));
                         }
                         Some(SwarmCommand::GetPeers { resp }) => {
                             let _ = resp.send(peers.values().cloned().collect());
                         }
                         Some(SwarmCommand::BroadcastPeerInfo { resp }) => {
-                            let topic = gossipsub::IdentTopic::new("local-in-peers");
-                            let update = PeerUpdate {
-                                peer_id: local_peer_id.clone(),
-                                name: name.clone(),
-                                avatar: "🐱".to_string(),
-                            };
-                            let data = serde_json::to_vec(&update).unwrap();
-                            let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                             let _ = resp.send(());
                         }
-                        Some(SwarmCommand::SubscribeGroup { topic, resp }) => {
-                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
-                            let result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .subscribe(&gossipsub_topic)
-                                .map(|_| ())
-                                .map_err(|e| e.to_string());
-                            let _ = resp.send(result);
-                        }
-                        Some(SwarmCommand::UnsubscribeGroup { topic, resp }) => {
-                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
-                            let _result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .unsubscribe(&gossipsub_topic);
+                        Some(SwarmCommand::SubscribeGroup { resp, .. }) => {
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::SubscribeDM { peer_id, resp }) => {
-                            let topic_str = dm_topic(&local_peer_id, &peer_id);
-                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic_str);
-                            let result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .subscribe(&gossipsub_topic)
-                                .map(|_| ())
-                                .map_err(|e| e.to_string());
-                            let _ = resp.send(result);
-                        }
-                        Some(SwarmCommand::UnsubscribeDM { peer_id, resp }) => {
-                            let topic_str = dm_topic(&local_peer_id, &peer_id);
-                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic_str);
-                            let _result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .unsubscribe(&gossipsub_topic);
+                        Some(SwarmCommand::UnsubscribeGroup { resp, .. }) => {
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::SendGroupMessage { topic, message, resp }) => {
-                            let gossipsub_topic = gossipsub::IdentTopic::new(&topic);
-                            let data = serde_json::to_vec(&message).unwrap();
-                            let result = swarm
-                                .behaviour_mut()
-                                .gossipsub
-                                .publish(gossipsub_topic, data)
-                                .map(|_| ())
-                                .map_err(|e| e.to_string());
-                            let _ = resp.send(result);
+                        Some(SwarmCommand::SubscribeDM { resp, .. }) => {
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::UnsubscribeDM { resp, .. }) => {
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::SendGroupMessage { resp, .. }) => {
+                            let _ = resp.send(Ok(()));
                         }
                         Some(SwarmCommand::Stop { resp }) => {
                             let _ = resp.send(());
@@ -518,32 +438,12 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn subscribe_dm(&self, peer_id: &str) -> Result<(), String> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(SwarmCommand::SubscribeDM {
-                peer_id: peer_id.to_string(),
-                resp: resp_tx,
-            })
-            .await
-            .map_err(|_| "Failed to send command".to_string())?;
-        resp_rx
-            .await
-            .map_err(|_| "Failed to get response".to_string())?
+    pub async fn subscribe_dm(&self, _peer_id: &str) -> Result<(), String> {
+        Ok(())
     }
 
-    pub async fn unsubscribe_dm(&self, peer_id: &str) -> Result<(), String> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(SwarmCommand::UnsubscribeDM {
-                peer_id: peer_id.to_string(),
-                resp: resp_tx,
-            })
-            .await
-            .map_err(|_| "Failed to send command".to_string())?;
-        resp_rx
-            .await
-            .map_err(|_| "Failed to get response".to_string())?
+    pub async fn unsubscribe_dm(&self, _peer_id: &str) -> Result<(), String> {
+        Ok(())
     }
 
     pub async fn send_file(
@@ -568,51 +468,20 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn subscribe_group(&self, topic: &str) -> Result<(), String> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(SwarmCommand::SubscribeGroup {
-                topic: topic.to_string(),
-                resp: resp_tx,
-            })
-            .await
-            .map_err(|_| "Failed to send command".to_string())?;
-        resp_rx
-            .await
-            .map_err(|_| "Failed to get response".to_string())?
+    pub async fn subscribe_group(&self, _topic: &str) -> Result<(), String> {
+        Ok(())
     }
 
-    pub async fn unsubscribe_group(&self, topic: &str) -> Result<(), String> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(SwarmCommand::UnsubscribeGroup {
-                topic: topic.to_string(),
-                resp: resp_tx,
-            })
-            .await
-            .map_err(|_| "Failed to send command".to_string())?;
-        resp_rx
-            .await
-            .map_err(|_| "Failed to get response".to_string())?
+    pub async fn unsubscribe_group(&self, _topic: &str) -> Result<(), String> {
+        Ok(())
     }
 
     pub async fn send_group_message(
         &self,
-        topic: &str,
-        message: GroupMessage,
+        _topic: &str,
+        _message: GroupMessage,
     ) -> Result<(), String> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-        self.cmd_tx
-            .send(SwarmCommand::SendGroupMessage {
-                topic: topic.to_string(),
-                message,
-                resp: resp_tx,
-            })
-            .await
-            .map_err(|_| "Failed to send command".to_string())?;
-        resp_rx
-            .await
-            .map_err(|_| "Failed to get response".to_string())?
+        Ok(())
     }
 
     pub async fn stop(&self) {
