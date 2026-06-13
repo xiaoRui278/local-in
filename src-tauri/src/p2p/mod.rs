@@ -244,19 +244,12 @@ impl P2PNode {
                                 }
                             } else if topic_str == "local-in-peers" {
                                 if let Ok(update) = serde_json::from_slice::<PeerUpdate>(&message.data) {
-                                    if let Some(peer) = peers.get_mut(&update.peer_id) {
-                                        peer.name = update.name;
-                                        peer.avatar = update.avatar;
-
-                                        let topic = gossipsub::IdentTopic::new("local-in-peers");
-                                        let reply = PeerUpdate {
-                                            peer_id: local_peer_id.clone(),
-                                            name: name.clone(),
-                                            avatar: "🐱".to_string(),
-                                        };
-                                        let data = serde_json::to_vec(&reply).unwrap();
-                                        let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
-                                    }
+                                    peers.insert(update.peer_id.clone(), PeerInfo {
+                                        peer_id: update.peer_id,
+                                        name: update.name,
+                                        avatar: update.avatar,
+                                        online: true,
+                                    });
                                 }
                             } else if topic_str.starts_with("local-in-group-") {
                                 if let Ok(group_msg) = serde_json::from_slice::<GroupMessage>(&message.data) {
