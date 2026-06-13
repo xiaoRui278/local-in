@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 pub struct MessageRecord {
     pub id: String,
     pub from_peer: String,
+    pub from_name: String,
     pub to_peer: String,
     pub content: String,
     pub timestamp: i64,
@@ -91,6 +92,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
                 from_peer TEXT NOT NULL,
+                from_name TEXT NOT NULL DEFAULT '',
                 to_peer TEXT NOT NULL,
                 content TEXT NOT NULL,
                 timestamp INTEGER NOT NULL,
@@ -145,8 +147,8 @@ impl Database {
     pub fn save_message(&self, msg: &MessageRecord) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO messages (id, from_peer, to_peer, content, timestamp, is_read) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            (&msg.id, &msg.from_peer, &msg.to_peer, &msg.content, &msg.timestamp, msg.is_read),
+            "INSERT INTO messages (id, from_peer, from_name, to_peer, content, timestamp, is_read) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            (&msg.id, &msg.from_peer, &msg.from_name, &msg.to_peer, &msg.content, &msg.timestamp, msg.is_read),
         )?;
         Ok(())
     }
@@ -154,7 +156,7 @@ impl Database {
     pub fn get_messages(&self, peer_id: &str, limit: i64) -> Result<Vec<MessageRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, from_peer, to_peer, content, timestamp, is_read FROM messages WHERE from_peer = ?1 OR to_peer = ?1 ORDER BY timestamp DESC LIMIT ?2"
+            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE from_peer = ?1 OR to_peer = ?1 ORDER BY timestamp DESC LIMIT ?2"
         )?;
 
         let messages = stmt
@@ -162,10 +164,11 @@ impl Database {
                 Ok(MessageRecord {
                     id: row.get(0)?,
                     from_peer: row.get(1)?,
-                    to_peer: row.get(2)?,
-                    content: row.get(3)?,
-                    timestamp: row.get(4)?,
-                    is_read: row.get(5)?,
+                    from_name: row.get(2)?,
+                    to_peer: row.get(3)?,
+                    content: row.get(4)?,
+                    timestamp: row.get(5)?,
+                    is_read: row.get(6)?,
                 })
             })?
             .collect::<Result<Vec<_>>>()?;

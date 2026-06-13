@@ -65,6 +65,7 @@ async fn start_node(
                     let record = MessageRecord {
                         id: uuid::Uuid::new_v4().to_string(),
                         from_peer: msg.from,
+                        from_name: msg.from_name,
                         to_peer: "global".to_string(),
                         content: msg.content,
                         timestamp: msg.timestamp as i64,
@@ -149,9 +150,11 @@ async fn send_message(
     if let Some(node) = node_guard.as_ref() {
         node.send_message(&to, &content).await?;
 
+        let from_name = state.db.get_user_config("name").map_err(|e| e.to_string())?.unwrap_or_else(|| "Anonymous".to_string());
         let msg = MessageRecord {
             id: uuid::Uuid::new_v4().to_string(),
             from_peer: from,
+            from_name,
             to_peer: to,
             content,
             timestamp: chrono::Utc::now().timestamp(),
@@ -175,9 +178,11 @@ async fn send_global_message(
     if let Some(node) = node_guard.as_ref() {
         node.send_message("", &content).await?;
 
+        let from_name = state.db.get_user_config("name").map_err(|e| e.to_string())?.unwrap_or_else(|| "Anonymous".to_string());
         let msg = MessageRecord {
             id: uuid::Uuid::new_v4().to_string(),
             from_peer: from,
+            from_name,
             to_peer: "global".to_string(),
             content,
             timestamp: chrono::Utc::now().timestamp(),

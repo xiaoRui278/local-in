@@ -12,6 +12,7 @@ interface Peer {
 interface MessageRecord {
   id: string;
   from_peer: string;
+  from_name: string;
   to_peer: string;
   content: string;
   timestamp: number;
@@ -226,6 +227,7 @@ function App() {
         {
           id: Date.now().toString(),
           from_peer: myPeerId,
+          from_name: name,
           to_peer: selectedPeer,
           content: input.trim(),
           timestamp: Math.floor(Date.now() / 1000),
@@ -282,6 +284,7 @@ function App() {
         {
           id: Date.now().toString(),
           from_peer: myPeerId,
+          from_name: name,
           to_peer: "global",
           content: input.trim(),
           timestamp: Math.floor(Date.now() / 1000),
@@ -855,7 +858,7 @@ function App() {
                 >
                   {msg.from_peer !== myPeerId && (
                     <div className="message-sender">
-                      {peers.find((p) => p.peer_id === msg.from_peer)?.name || msg.from_peer.slice(0, 8)}
+                      {msg.from_name || msg.from_peer.slice(0, 8)}
                     </div>
                   )}
                   <div className="message-content">{msg.content}</div>
