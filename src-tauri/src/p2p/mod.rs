@@ -243,7 +243,7 @@ impl P2PNode {
                 })
             })?
             .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(60))
+                cfg.with_idle_connection_timeout(std::time::Duration::from_secs(600))
             })
             .build();
 
