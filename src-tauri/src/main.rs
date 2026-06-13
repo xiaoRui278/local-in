@@ -583,6 +583,11 @@ async fn stop_node(state: tauri::State<'_, AppState>) -> Result<(), String> {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter("local_in=debug")
+        .with_writer(std::io::stderr)
+        .init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

@@ -268,6 +268,7 @@ impl P2PNode {
                                     online: true,
                                 };
                                 peers.insert(peer_id.to_string(), info);
+                                tracing::info!("Total peers: {}", peers.len());
                             }
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::Mdns(
@@ -282,6 +283,7 @@ impl P2PNode {
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::RequestResponse(
                             request_response::Event::Message { message, .. }
                         ))) => {
+                            tracing::info!("RequestResponse message received");
                             match message {
                                 request_response::Message::Request {
                                     request, channel, ..
@@ -326,6 +328,8 @@ impl P2PNode {
                 cmd = cmd_rx.recv() => {
                     match cmd {
                         Some(SwarmCommand::SendMessage { to_peer, content, resp }) => {
+                            tracing::info!("Sending message to '{}': {}", to_peer, content);
+                            tracing::info!("Connected peers: {:?}", connected_peers.keys().collect::<Vec<_>>());
                             let msg = ChatMessage {
                                 from: local_peer_id.clone(),
                                 from_name: name.clone(),
@@ -341,8 +345,10 @@ impl P2PNode {
                             let request = ChatRequest::SendMessage(data);
 
                             if to_peer.is_empty() {
+                                tracing::info!("Broadcasting to {} peers", connected_peers.len());
                                 for (_peer_str, peer_id) in connected_peers.iter() {
                                     let peer_id_copy = *peer_id;
+                                    tracing::info!("Sending to peer: {}", peer_id_copy);
                                     swarm
                                         .behaviour_mut()
                                         .request_response
@@ -352,12 +358,14 @@ impl P2PNode {
                             } else {
                                 if let Some(peer_id) = connected_peers.get(&to_peer) {
                                     let peer_id_copy = *peer_id;
+                                    tracing::info!("Sending to specific peer: {}", peer_id_copy);
                                     swarm
                                         .behaviour_mut()
                                         .request_response
                                         .send_request(&peer_id_copy, request);
                                     let _ = resp.send(Ok(()));
                                 } else {
+                                    tracing::error!("Peer not found: {}", to_peer);
                                     let _ = resp.send(Err("Peer not found".to_string()));
                                 }
                             }
