@@ -122,7 +122,7 @@ pub struct P2PNode {
     #[allow(dead_code)]
     name: String,
     cmd_tx: mpsc::Sender<SwarmCommand>,
-    pub received_msg_rx: mpsc::Receiver<ChatMessage>,
+    received_msg_rx: Option<mpsc::Receiver<ChatMessage>>,
 }
 
 impl P2PNode {
@@ -184,7 +184,7 @@ impl P2PNode {
             peer_id,
             name,
             cmd_tx,
-            received_msg_rx,
+            received_msg_rx: Some(received_msg_rx),
         })
     }
 
@@ -437,9 +437,8 @@ impl P2PNode {
         self.peer_id.clone()
     }
 
-    pub fn take_message_receiver(&mut self) -> mpsc::Receiver<ChatMessage> {
-        let (_tx, rx) = mpsc::channel(256);
-        std::mem::replace(&mut self.received_msg_rx, rx)
+    pub fn take_message_receiver(&mut self) -> Option<mpsc::Receiver<ChatMessage>> {
+        self.received_msg_rx.take()
     }
 
     pub async fn get_peers(&self) -> Vec<PeerInfo> {
