@@ -1,0 +1,125 @@
+/*
+ * Design Tokens - Local-In
+ * Dark Mode OLED aesthetic for developer tools
+ * 8px spacing grid
+ */
+
+:root {
+  /* === Surface Colors === */
+  --color-surface-primary: #0F172A;
+  --color-surface-secondary: #1E293B;
+  --color-surface-elevated: #334155;
+
+  /* === Text Colors === */
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  /* === Accent Colors === */
+  --color-accent-blue: #2563EB;
+  --color-accent-blue-hover: #1D4ED8;
+  --color-accent-indigo: #6366F1;
+  --color-accent-green: #10B981;
+  --color-accent-red: #EF4444;
+  --color-accent-amber: #F59E0B;
+  --color-accent-cyan: #06B6D4;
+  --color-accent-cyan-alt: #0EA5E9;
+
+  /* === Border === */
+  --color-border: #334155;
+
+  /* === Interaction === */
+  --color-hover-bg: rgba(255, 255, 255, 0.05);
+  --color-focus-ring: rgba(37, 99, 235, 0.4);
+
+  /* === Message Bubbles === */
+  --color-message-sent: #2563EB;
+  --color-message-received: #334155;
+
+  /* === Shadows === */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+  --shadow-glow-blue: 0 0 12px rgba(37, 99, 235, 0.3);
+  --shadow-glow-green: 0 0 12px rgba(16, 185, 129, 0.3);
+
+  /* === Spacing (8px grid) === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* === Border Radius === */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* === Typography === */
+  --font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size: 14px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 28px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+
+  /* === Transitions === */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* === Z-Index === */
+  --z-base: 0;
+  --z-dropdown: 50;
+  --z-modal-overlay: 100;
+  --z-modal: 110;
+
+  /* === Avatar Gradients (semantic) === */
+  --avatar-gradient-1: linear-gradient(135deg, #F59E0B, #EF4444);
+  --avatar-gradient-2: linear-gradient(135deg, #10B981, #059669);
+  --avatar-gradient-3: linear-gradient(135deg, #8B5CF6, #6366F1);
+  --avatar-gradient-4: linear-gradient(135deg, #EC4899, #F43F5E);
+  --avatar-gradient-5: linear-gradient(135deg, #06B6D4, #0EA5E9);
+  --logo-gradient: linear-gradient(135deg, #2563EB, #6366F1);
+}
+
+/* === Light Theme Override === */
+.light {
+  --color-surface-primary: #FFFFFF;
+  --color-surface-secondary: #F8FAFC;
+  --color-surface-elevated: #F1F5F9;
+
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+
+  --color-border: #E2E8F0;
+
+  --color-hover-bg: rgba(0, 0, 0, 0.05);
+  --color-focus-ring: rgba(37, 99, 235, 0.3);
+
+  --color-message-sent: #2563EB;
+  --color-message-received: #F1F5F9;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-glow-blue: 0 0 8px rgba(37, 99, 235, 0.15);
+  --shadow-glow-green: 0 0 8px rgba(16, 185, 129, 0.15);
+}
