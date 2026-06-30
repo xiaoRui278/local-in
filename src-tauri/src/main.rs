@@ -1,5 +1,6 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Manager;
@@ -40,9 +41,147 @@ enum GroupEventPayload {
     Sync { group_id: String, passcode: String, group_name: String, creator_peer: String, members: Vec<GroupSyncMember> },
 }
 
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+enum ChatHistoryType {
+    Private,
+    Group,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
+struct ChatHistoryRecord {
+    peer_id: String,
+    peer_name: String,
+    last_message: String,
+    last_message_time: i64,
+    record_type: ChatHistoryType,
+    group_id: Option<String>,
+    member_count: Option<i64>,
+}
+
 struct AppState {
     node: Mutex<Option<P2PNode>>,
     db: Arc<Database>,
+}
+
+struct IncomingGroupResolution {
+    group: GroupRecord,
+    should_create: bool,
+}
+
+fn resolve_join_group(group: Option<GroupRecord>) -> Result<GroupRecord, String> {
+    group.ok_or_else(|| "Group not found for passcode".to_string())
+}
+
+fn resolve_incoming_group(
+    existing_group: Option<GroupRecord>,
+    incoming_group_id: &str,
+    passcode: &str,
+    incoming_group_name: &str,
+    incoming_creator_peer: &str,
+) -> IncomingGroupResolution {
+    match existing_group {
+        Some(group) => {
+            let mut resolved = group;
+            if resolved.creator_peer.is_empty() {
+                resolved.name = incoming_group_name.to_string();
+                resolved.creator_peer = incoming_creator_peer.to_string();
+            }
+            IncomingGroupResolution {
+                group: resolved,
+                should_create: false,
+            }
+        }
+        None => IncomingGroupResolution {
+            group: GroupRecord {
+                id: incoming_group_id.to_string(),
+                name: incoming_group_name.to_string(),
+                passcode: passcode.to_string(),
+                topic: format!("local-in-group-{passcode}"),
+                creator_peer: incoming_creator_peer.to_string(),
+                created_at: chrono::Utc::now().timestamp(),
+            },
+            should_create: true,
+        },
+    }
+}
+
+fn build_private_chat_history(my_peer_id: &str, messages: Vec<MessageRecord>) -> Vec<ChatHistoryRecord> {
+    let mut by_peer: HashMap<String, ChatHistoryRecord> = HashMap::new();
+
+    for message in messages {
+        if message.to_peer == "global" || message.to_peer.is_empty() {
+            continue;
+        }
+
+        let (peer_id, peer_name) = if message.from_peer == my_peer_id {
+            (message.to_peer.clone(), message.to_peer.clone())
+        } else {
+            (message.from_peer.clone(), message.from_name.clone())
+        };
+
+        let should_replace = by_peer
+            .get(&peer_id)
+            .map(|existing| message.timestamp > existing.last_message_time)
+            .unwrap_or(true);
+
+        if should_replace {
+            by_peer.insert(
+                peer_id.clone(),
+                ChatHistoryRecord {
+                    peer_id,
+                    peer_name,
+                    last_message: message.content,
+                    last_message_time: message.timestamp,
+                    record_type: ChatHistoryType::Private,
+                    group_id: None,
+                    member_count: None,
+                },
+            );
+        }
+    }
+
+    let mut history: Vec<_> = by_peer.into_values().collect();
+    history.sort_by(|a, b| b.last_message_time.cmp(&a.last_message_time));
+    history
+}
+
+fn build_group_chat_history<F>(
+    groups: Vec<GroupRecord>,
+    messages: Vec<GroupMessageRecord>,
+    member_count: F,
+) -> Vec<ChatHistoryRecord>
+where
+    F: Fn(&str) -> i64,
+{
+    let mut latest_by_group: HashMap<String, GroupMessageRecord> = HashMap::new();
+    for message in messages {
+        let should_replace = latest_by_group
+            .get(&message.group_id)
+            .map(|existing| message.timestamp > existing.timestamp)
+            .unwrap_or(true);
+        if should_replace {
+            latest_by_group.insert(message.group_id.clone(), message);
+        }
+    }
+
+    let mut history: Vec<_> = groups
+        .into_iter()
+        .map(|group| {
+            let latest = latest_by_group.remove(&group.id);
+            ChatHistoryRecord {
+                peer_id: group.id.clone(),
+                peer_name: group.name,
+                last_message: latest.as_ref().map(|msg| msg.content.clone()).unwrap_or_default(),
+                last_message_time: latest.as_ref().map(|msg| msg.timestamp).unwrap_or(group.created_at),
+                record_type: ChatHistoryType::Group,
+                group_id: Some(group.id.clone()),
+                member_count: Some(member_count(&group.id)),
+            }
+        })
+        .collect();
+    history.sort_by(|a, b| b.last_message_time.cmp(&a.last_message_time));
+    history
 }
 
 #[derive(Serialize, Deserialize)]
@@ -270,12 +409,41 @@ async fn start_node(
                         creator_peer,
                         message,
                     } => {
+                        let resolved = match group_db.get_group_by_passcode(&passcode) {
+                            Ok(existing) => resolve_incoming_group(
+                                existing,
+                                &group_id,
+                                &passcode,
+                                &group_name,
+                                &creator_peer,
+                            ),
+                            Err(e) => {
+                                tracing::error!("Failed to resolve incoming group: {}", e);
+                                continue;
+                            }
+                        };
+                        if resolved.should_create {
+                            if let Err(e) = group_db.create_group(&resolved.group) {
+                                tracing::error!("Failed to create incoming group: {}", e);
+                                continue;
+                            }
+                        } else if resolved.group.id != group_id {
+                            tracing::info!(
+                                "Mapped incoming group {} to local group {} by passcode {}",
+                                group_id,
+                                resolved.group.id,
+                                passcode
+                            );
+                        }
+                        let local_group_id = resolved.group.id.clone();
+                        let local_group_name = resolved.group.name.clone();
+                        let local_creator_peer = resolved.group.creator_peer.clone();
                         match message {
                             GroupMessage::Chat { from, from_name, content, timestamp } => {
                                 if from != group_node_peer_id {
                                     let record = GroupMessageRecord {
                                         id: uuid::Uuid::new_v4().to_string(),
-                                        group_id: group_id.clone(),
+                                        group_id: local_group_id.clone(),
                                         from_peer: from.clone(),
                                         from_name: from_name.clone(),
                                         content: content.clone(),
@@ -283,10 +451,10 @@ async fn start_node(
                                     };
                                     let _ = group_db.save_group_message(&record);
                                     let payload = GroupEventPayload::Chat {
-                                        group_id,
+                                        group_id: local_group_id.clone(),
                                         passcode,
-                                        group_name,
-                                        creator_peer,
+                                        group_name: local_group_name.clone(),
+                                        creator_peer: local_creator_peer.clone(),
                                         from_peer: from,
                                         from_name,
                                         content,
@@ -297,17 +465,17 @@ async fn start_node(
                             }
                             GroupMessage::Join { peer_id, peer_name } => {
                                 let record = GroupMemberRecord {
-                                    group_id: group_id.clone(),
+                                    group_id: local_group_id.clone(),
                                     peer_id: peer_id.clone(),
                                     peer_name: Some(peer_name.clone()),
                                     joined_at: chrono::Utc::now().timestamp(),
                                 };
                                 let _ = group_db.upsert_group_member(&record);
                                 let payload = GroupEventPayload::Join {
-                                    group_id,
+                                    group_id: local_group_id.clone(),
                                     passcode,
-                                    group_name,
-                                    creator_peer,
+                                    group_name: local_group_name.clone(),
+                                    creator_peer: local_creator_peer.clone(),
                                     peer_id,
                                     peer_name,
                                     joined_at: chrono::Utc::now().timestamp(),
@@ -315,13 +483,13 @@ async fn start_node(
                                 let _ = on_group_event.send(payload);
                             }
                             GroupMessage::Leave { peer_id } => {
-                                let _ = group_db.remove_group_member(&group_id, &peer_id);
-                                let payload = GroupEventPayload::Leave { group_id, peer_id };
+                                let _ = group_db.remove_group_member(&local_group_id, &peer_id);
+                                let payload = GroupEventPayload::Leave { group_id: local_group_id.clone(), peer_id };
                                 let _ = on_group_event.send(payload);
                             }
                             GroupMessage::Dissolve => {
-                                let _ = group_db.delete_group(&group_id);
-                                let payload = GroupEventPayload::Dissolve { group_id };
+                                let _ = group_db.delete_group(&local_group_id);
+                                let payload = GroupEventPayload::Dissolve { group_id: local_group_id.clone() };
                                 let _ = on_group_event.send(payload);
                             }
                         }
@@ -333,18 +501,31 @@ async fn start_node(
                         creator_peer,
                         members,
                     } => {
-                        let record = GroupRecord {
-                            id: group_id.clone(),
-                            name: name.clone(),
-                            passcode: passcode.clone(),
-                            topic: format!("local-in-group-{passcode}"),
-                            creator_peer: creator_peer.clone(),
-                            created_at: chrono::Utc::now().timestamp(),
+                        let resolved = match group_db.get_group_by_passcode(&passcode) {
+                            Ok(existing) => resolve_incoming_group(
+                                existing,
+                                &group_id,
+                                &passcode,
+                                &name,
+                                &creator_peer,
+                            ),
+                            Err(e) => {
+                                tracing::error!("Failed to resolve group sync: {}", e);
+                                continue;
+                            }
                         };
-                        let _ = group_db.upsert_group(&record);
+                        if resolved.should_create {
+                            if let Err(e) = group_db.create_group(&resolved.group) {
+                                tracing::error!("Failed to create synced group: {}", e);
+                                continue;
+                            }
+                        } else if let Err(e) = group_db.upsert_group(&resolved.group) {
+                            tracing::error!("Failed to update synced group: {}", e);
+                        }
+                        let local_group_id = resolved.group.id.clone();
                         for member in &members {
                             let member_record = GroupMemberRecord {
-                                group_id: group_id.clone(),
+                                group_id: local_group_id.clone(),
                                 peer_id: member.peer_id.clone(),
                                 peer_name: Some(member.peer_name.clone()),
                                 joined_at: member.joined_at,
@@ -352,10 +533,10 @@ async fn start_node(
                             let _ = group_db.upsert_group_member(&member_record);
                         }
                         let payload = GroupEventPayload::Sync {
-                            group_id,
+                            group_id: local_group_id,
                             passcode,
-                            group_name: name,
-                            creator_peer,
+                            group_name: resolved.group.name,
+                            creator_peer: resolved.group.creator_peer,
                             members,
                         };
                         let _ = on_group_event.send(payload);
@@ -545,6 +726,32 @@ async fn get_dm_messages(
         .db
         .get_dm_messages(&peer1, &peer2, limit)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_chat_history(state: tauri::State<'_, AppState>) -> Result<Vec<ChatHistoryRecord>, String> {
+    let my_peer_id = state
+        .db
+        .get_user_config("peer_id")
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
+    let private_messages = state
+        .db
+        .get_all_non_global_messages()
+        .map_err(|e| e.to_string())?;
+    let groups = state.db.get_all_groups().map_err(|e| e.to_string())?;
+    let group_messages = state
+        .db
+        .get_all_group_messages()
+        .map_err(|e| e.to_string())?;
+
+    let mut history = build_private_chat_history(&my_peer_id, private_messages);
+    let mut group_history = build_group_chat_history(groups, group_messages, |group_id| {
+        state.db.get_group_member_count(group_id).unwrap_or(0)
+    });
+    history.append(&mut group_history);
+    history.sort_by(|a, b| b.last_message_time.cmp(&a.last_message_time));
+    Ok(history)
 }
 
 #[tauri::command]
@@ -781,22 +988,9 @@ async fn join_group(
     let peer_name = state.db.get_user_config("name").map_err(|e| e.to_string())?;
     let topic = format!("local-in-group-{}", passcode);
 
-    let group = match state.db.get_group_by_passcode(&passcode).map_err(|e| e.to_string())? {
-        Some(g) => g,
-        None => {
-            let group_id = uuid::Uuid::new_v4().to_string();
-            let new_group = GroupRecord {
-                id: group_id.clone(),
-                name: format!("Group {}", passcode),
-                passcode: passcode.clone(),
-                topic: topic.clone(),
-                creator_peer: String::new(),
-                created_at: chrono::Utc::now().timestamp(),
-            };
-            state.db.create_group(&new_group).map_err(|e| e.to_string())?;
-            new_group
-        }
-    };
+    let group = resolve_join_group(
+        state.db.get_group_by_passcode(&passcode).map_err(|e| e.to_string())?
+    )?;
 
     let member = GroupMemberRecord {
         group_id: group.id.clone(),
@@ -1031,6 +1225,7 @@ fn main() {
             get_global_messages,
             get_messages,
             get_dm_messages,
+            get_chat_history,
             get_saved_name,
             send_file,
             cancel_file_transfer,
@@ -1064,5 +1259,91 @@ mod tests {
         let decoded = Keypair::from_protobuf_encoding(&encoded).unwrap();
 
         assert_eq!(decoded.public().to_peer_id(), peer_id);
+    }
+
+    #[test]
+    fn incoming_group_event_uses_existing_local_group_id_for_same_passcode() {
+        let local_group = GroupRecord {
+            id: "local-group".to_string(),
+            name: "本地群".to_string(),
+            passcode: "1234".to_string(),
+            topic: "local-in-group-1234".to_string(),
+            creator_peer: "local-creator".to_string(),
+            created_at: 1,
+        };
+
+        let resolved = resolve_incoming_group(Some(local_group), "remote-group", "1234", "远端群", "remote-creator");
+
+        assert_eq!(resolved.group.id, "local-group");
+        assert_eq!(resolved.group.name, "本地群");
+        assert_eq!(resolved.group.passcode, "1234");
+        assert_eq!(resolved.group.creator_peer, "local-creator");
+        assert!(!resolved.should_create);
+    }
+
+    #[test]
+    fn chat_history_uses_latest_message_per_private_peer() {
+        let messages = vec![
+            MessageRecord {
+                id: "1".to_string(),
+                from_peer: "me".to_string(),
+                from_name: "我".to_string(),
+                to_peer: "peer-a".to_string(),
+                content: "旧消息".to_string(),
+                timestamp: 10,
+                is_read: true,
+            },
+            MessageRecord {
+                id: "2".to_string(),
+                from_peer: "peer-a".to_string(),
+                from_name: "对方".to_string(),
+                to_peer: "me".to_string(),
+                content: "新消息".to_string(),
+                timestamp: 20,
+                is_read: false,
+            },
+        ];
+
+        let history = build_private_chat_history("me", messages);
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].peer_id, "peer-a");
+        assert_eq!(history[0].peer_name, "对方");
+        assert_eq!(history[0].last_message, "新消息");
+        assert_eq!(history[0].last_message_time, 20);
+        assert_eq!(history[0].record_type, ChatHistoryType::Private);
+    }
+
+    #[test]
+    fn chat_history_includes_group_last_message() {
+        let groups = vec![GroupRecord {
+            id: "group-a".to_string(),
+            name: "群 A".to_string(),
+            passcode: "1234".to_string(),
+            topic: "local-in-group-1234".to_string(),
+            creator_peer: "creator".to_string(),
+            created_at: 1,
+        }];
+        let group_messages = vec![GroupMessageRecord {
+            id: "m1".to_string(),
+            group_id: "group-a".to_string(),
+            from_peer: "peer-a".to_string(),
+            from_name: "对方".to_string(),
+            content: "群历史消息".to_string(),
+            timestamp: 30,
+        }];
+
+        let history = build_group_chat_history(groups, group_messages, |group_id| {
+            if group_id == "group-a" { 2 } else { 0 }
+        });
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].peer_id, "group-a");
+        assert_eq!(history[0].peer_name, "群 A");
+        assert_eq!(history[0].last_message, "群历史消息");
+        assert_eq!(history[0].last_message_time, 30);
+        assert_eq!(history[0].record_type, ChatHistoryType::Group);
+        assert_eq!(history[0].group_id.as_deref(), Some("group-a"));
+        assert_eq!(history[0].member_count, Some(2));
     }
 }

@@ -53,6 +53,16 @@ export interface ChatHistoryItem {
   member_count?: number;
 }
 
+export interface ChatHistoryRecord {
+  peer_id: string;
+  peer_name: string;
+  last_message: string;
+  last_message_time: number;
+  record_type: "private" | "group";
+  group_id?: string | null;
+  member_count?: number | null;
+}
+
 export interface MessagePayload {
   record: MessageRecord;
   is_new: boolean;

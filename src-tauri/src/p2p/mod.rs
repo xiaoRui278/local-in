@@ -305,6 +305,10 @@ enum SwarmCommand {
     },
 }
 
+fn apply_peer_info(peers: &mut HashMap<String, PeerInfo>, info: PeerInfo) {
+    peers.insert(info.peer_id.clone(), info);
+}
+
 fn remember_connected_peer(
     connected_peers: &mut HashMap<String, PeerId>,
     peers: &mut HashMap<String, PeerInfo>,
@@ -485,6 +489,16 @@ impl P2PNode {
                         Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
                             tracing::info!("Connection established with {}", peer_id);
                             remember_connected_peer(&mut connected_peers, &mut peers, peer_id);
+                            let local_info = PeerInfo {
+                                peer_id: local_peer_id.clone(),
+                                name: name.clone(),
+                                avatar: "🐱".to_string(),
+                                online: true,
+                            };
+                            swarm
+                                .behaviour_mut()
+                                .request_response
+                                .send_request(&peer_id, ChatRequest::PeerInfo(local_info));
                         }
                         Some(SwarmEvent::ConnectionClosed { peer_id, .. }) => {
                             tracing::info!("Connection closed with {}", peer_id);
@@ -523,7 +537,7 @@ impl P2PNode {
                                             if let Ok(peer_id) = info.peer_id.parse::<PeerId>() {
                                                 connected_peers.insert(info.peer_id.clone(), peer_id);
                                             }
-                                            peers.insert(info.peer_id.clone(), info);
+                                            apply_peer_info(&mut peers, info);
                                         }
                                         ChatRequest::FileOffer { from, from_name, to, file_id, filename, file_size, sha256, timestamp } => {
                                             tracing::info!("File offer from {}: {} ({} bytes)", from_name, filename, file_size);
@@ -651,18 +665,15 @@ impl P2PNode {
                                             }
                                         }
                                         ChatRequest::GroupInfoSync { passcode, group_id, name, creator_peer, members } => {
-                                            let topic = format!("local-in-group-{}", passcode);
-                                            if subscribed_topics.contains(&topic) {
-                                                let event = GroupNetworkEvent::Sync {
-                                                    passcode,
-                                                    group_id,
-                                                    name,
-                                                    creator_peer,
-                                                    members,
-                                                };
-                                                if let Err(e) = received_group_tx.try_send(event) {
-                                                    tracing::error!("Failed to forward group sync: {}", e);
-                                                }
+                                            let event = GroupNetworkEvent::Sync {
+                                                passcode,
+                                                group_id,
+                                                name,
+                                                creator_peer,
+                                                members,
+                                            };
+                                            if let Err(e) = received_group_tx.try_send(event) {
+                                                tracing::error!("Failed to forward group sync: {}", e);
                                             }
                                         }
                                     }
@@ -1199,19 +1210,19 @@ mod tests {
     }
 
     #[test]
-    fn peer_info_peer_id_can_restore_connected_peer_entry() {
+    fn peer_info_replaces_placeholder_peer_name() {
         let peer = PeerId::random();
+        let mut peers = HashMap::new();
         let info = PeerInfo {
             peer_id: peer.to_string(),
-            name: "peer".to_string(),
+            name: "登录用户名".to_string(),
             avatar: "🐱".to_string(),
             online: true,
         };
-        let mut connected_peers = HashMap::new();
 
-        let parsed = info.peer_id.parse::<PeerId>().unwrap();
-        connected_peers.insert(info.peer_id.clone(), parsed);
+        remember_connected_peer(&mut HashMap::new(), &mut peers, peer);
+        apply_peer_info(&mut peers, info);
 
-        assert_eq!(connected_peers.get(&peer.to_string()), Some(&peer));
+        assert_eq!(peers.get(&peer.to_string()).unwrap().name, "登录用户名");
     }
 }

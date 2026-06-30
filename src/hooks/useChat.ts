@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { Peer, MessageRecord, GroupInfo, GroupMessageRecord, ChatHistoryItem, MessagePayload, FilePayload, GroupMember, GroupEventPayload, FileTransferEvent } from "../types";
+import type { Peer, MessageRecord, GroupInfo, GroupMessageRecord, ChatHistoryItem, ChatHistoryRecord, MessagePayload, FilePayload, GroupMember, GroupEventPayload, FileTransferEvent } from "../types";
 
 export function useChat() {
   const [name, setName] = useState("");
@@ -61,6 +61,24 @@ export function useChat() {
       console.error("Failed to get groups:", e);
     }
   }, []);
+
+  const loadChatHistory = useCallback(async () => {
+    try {
+      const history = await invoke<ChatHistoryRecord[]>("get_chat_history");
+      setChatHistory(history.map((item) => ({
+        peer_id: item.peer_id,
+        peer_name: item.peer_name,
+        last_message: item.last_message,
+        last_message_time: item.last_message_time,
+        type: item.record_type,
+        group_id: item.group_id || undefined,
+        member_count: item.member_count || undefined,
+      })));
+    } catch (e) {
+      console.error("Failed to load chat history:", e);
+    }
+  }, []);
+
 
   const loadGroupMessages = useCallback(async (groupId: string) => {
     try {
@@ -629,8 +647,9 @@ export function useChat() {
     if (started) {
       loadGroups();
       loadGlobalMessages();
+      loadChatHistory();
     }
-  }, [started, loadGroups, loadGlobalMessages]);
+  }, [started, loadGroups, loadGlobalMessages, loadChatHistory]);
 
   useEffect(() => {
     if (groups.length > 0) {

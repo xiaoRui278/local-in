@@ -177,6 +177,32 @@ impl Database {
         Ok(())
     }
 
+    pub fn get_all_non_global_messages(&self) -> Result<Vec<MessageRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read
+             FROM messages
+             WHERE to_peer != 'global' AND to_peer != ''
+             ORDER BY timestamp DESC",
+        )?;
+
+        let messages = stmt
+            .query_map([], |row| {
+                Ok(MessageRecord {
+                    id: row.get(0)?,
+                    from_peer: row.get(1)?,
+                    from_name: row.get(2)?,
+                    to_peer: row.get(3)?,
+                    content: row.get(4)?,
+                    timestamp: row.get(5)?,
+                    is_read: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(messages)
+    }
+
     pub fn get_messages(&self, peer_id: &str, limit: i64) -> Result<Vec<MessageRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -562,6 +588,28 @@ impl Database {
             (&msg.id, &msg.group_id, &msg.from_peer, &msg.from_name, &msg.content, &msg.timestamp),
         )?;
         Ok(())
+    }
+
+    pub fn get_all_group_messages(&self) -> Result<Vec<GroupMessageRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, group_id, from_peer, from_name, content, timestamp FROM group_messages ORDER BY timestamp DESC",
+        )?;
+
+        let messages = stmt
+            .query_map([], |row| {
+                Ok(GroupMessageRecord {
+                    id: row.get(0)?,
+                    group_id: row.get(1)?,
+                    from_peer: row.get(2)?,
+                    from_name: row.get(3)?,
+                    content: row.get(4)?,
+                    timestamp: row.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(messages)
     }
 
     #[allow(dead_code)]
