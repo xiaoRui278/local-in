@@ -479,9 +479,16 @@ impl P2PNode {
                         ))) => {
                             for (peer_id, _multiaddr) in list {
                                 tracing::info!("Peer expired: {}", peer_id);
-                                connected_peers.remove(&peer_id.to_string());
                                 peers.remove(&peer_id.to_string());
                             }
+                        }
+                        Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                            tracing::info!("Connection established with {}", peer_id);
+                            remember_connected_peer(&mut connected_peers, &mut peers, peer_id);
+                        }
+                        Some(SwarmEvent::ConnectionClosed { peer_id, .. }) => {
+                            tracing::info!("Connection closed with {}", peer_id);
+                            connected_peers.remove(&peer_id.to_string());
                         }
                         Some(SwarmEvent::Behaviour(LocalInBehaviourEvent::RequestResponse(
                             request_response::Event::Message { message, peer, .. }
@@ -513,6 +520,9 @@ impl P2PNode {
                                         }
                                         ChatRequest::PeerInfo(info) => {
                                             tracing::info!("Received PeerInfo from {}: {}", info.peer_id, info.name);
+                                            if let Ok(peer_id) = info.peer_id.parse::<PeerId>() {
+                                                connected_peers.insert(info.peer_id.clone(), peer_id);
+                                            }
                                             peers.insert(info.peer_id.clone(), info);
                                         }
                                         ChatRequest::FileOffer { from, from_name, to, file_id, filename, file_size, sha256, timestamp } => {
@@ -1186,5 +1196,22 @@ mod tests {
 
         assert_eq!(connected_peers.get(&peer.to_string()), Some(&peer));
         assert!(peers.contains_key(&peer.to_string()));
+    }
+
+    #[test]
+    fn peer_info_peer_id_can_restore_connected_peer_entry() {
+        let peer = PeerId::random();
+        let info = PeerInfo {
+            peer_id: peer.to_string(),
+            name: "peer".to_string(),
+            avatar: "🐱".to_string(),
+            online: true,
+        };
+        let mut connected_peers = HashMap::new();
+
+        let parsed = info.peer_id.parse::<PeerId>().unwrap();
+        connected_peers.insert(info.peer_id.clone(), parsed);
+
+        assert_eq!(connected_peers.get(&peer.to_string()), Some(&peer));
     }
 }
