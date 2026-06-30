@@ -33,21 +33,21 @@
 |------|------|
 | Node.js | 18 或更高 |
 | Rust | 1.70 或更高 |
-| npm | 随 Node.js 安装 |
+| pnpm | 推荐使用最新稳定版 |
 
 ### 从源码运行
 
 ```bash
 git clone git@github.com:xiaoRui278/local-in.git
 cd local-in
-npm install
-npm run tauri dev
+pnpm install
+pnpm run tauri dev
 ```
 
 ### 构建应用
 
 ```bash
-npm run tauri build
+pnpm run tauri build
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/`。
@@ -66,12 +66,12 @@ npm run tauri build
 
 | 命令 | 说明 |
 |------|------|
-| `npm install` | 安装前端和 Tauri CLI 依赖 |
-| `npm run dev` | 启动 Vite 前端开发服务器 |
-| `npm run tauri dev` | 启动 Tauri 桌面应用开发模式 |
-| `npm run build` | TypeScript 检查并构建前端 |
-| `npm run tauri build` | 构建桌面应用安装包 |
-| `npm run preview` | 预览前端构建结果 |
+| `pnpm install` | 安装前端和 Tauri CLI 依赖 |
+| `pnpm run dev` | 启动 Vite 前端开发服务器 |
+| `pnpm run tauri dev` | 启动 Tauri 桌面应用开发模式 |
+| `pnpm run build` | TypeScript 检查并构建前端 |
+| `pnpm run tauri build` | 构建桌面应用安装包 |
+| `pnpm run preview` | 预览前端构建结果 |
 | `cd src-tauri && cargo check` | 检查 Rust 后端 |
 | `cd src-tauri && cargo test` | 运行 Rust 测试 |
 | `cd src-tauri && cargo test <test_name>` | 运行单个 Rust 测试 |

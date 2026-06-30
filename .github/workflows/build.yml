@@ -2,10 +2,10 @@ name: Build
 
 on:
   push:
-    branches: [master]
+    branches: [master, feature/develop]
     tags: ['v*']
   pull_request:
-    branches: [master]
+    branches: [master, feature/develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,11 +40,16 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
       - name: Install system dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -53,7 +58,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri app
         shell: bash
@@ -61,7 +66,7 @@ jobs:
           if [ "${{ matrix.target }}" == "macos-x64" ]; then
             rustup target add x86_64-apple-darwin
           fi
-          npx tauri build ${{ matrix.args }}
+          pnpm tauri build ${{ matrix.args }}
 
       - name: Upload Windows artifacts
         if: matrix.target == 'windows'
