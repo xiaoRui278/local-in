@@ -33,6 +33,15 @@ function getAvatarColor(name: string) {
   return colors[Math.abs(hash) % colors.length];
 }
 
+function formatLastMessage(message: string) {
+  if (!message) return "新消息";
+  if (!message.startsWith("[FILE]")) return message;
+
+  const parts = message.slice(6).split("|");
+  const filename = parts[1];
+  return filename ? `文件：${filename}` : "文件消息";
+}
+
 export function Sidebar({
   theme, name, peers, chatHistory, chatMode, selectedPeer, selectedGroup,
   onToggleTheme, onOpenSettings, onSelectGlobal, onSelectPrivate, onSelectGroup,
@@ -119,7 +128,7 @@ export function Sidebar({
                 <div className="peer-info">
                   <span className="peer-name">{item.peer_name}</span>
                   <span className="peer-status">
-                    {item.type === "group" ? `${item.member_count} 人` : item.last_message || "新消息"}
+                    {item.type === "group" ? `${item.member_count} 人` : formatLastMessage(item.last_message)}
                   </span>
                 </div>
               </div>

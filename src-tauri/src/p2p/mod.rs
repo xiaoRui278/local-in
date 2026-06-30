@@ -305,6 +305,21 @@ enum SwarmCommand {
     },
 }
 
+fn remember_connected_peer(
+    connected_peers: &mut HashMap<String, PeerId>,
+    peers: &mut HashMap<String, PeerInfo>,
+    peer: PeerId,
+) {
+    let peer_key = peer.to_string();
+    connected_peers.insert(peer_key.clone(), peer);
+    peers.entry(peer_key.clone()).or_insert_with(|| PeerInfo {
+        peer_id: peer_key.clone(),
+        name: format!("Peer-{}", &peer_key[..8]),
+        avatar: "🐱".to_string(),
+        online: true,
+    });
+}
+
 #[derive(libp2p::swarm::NetworkBehaviour)]
 struct LocalInBehaviour {
     mdns: mdns::tokio::Behaviour,
@@ -472,6 +487,7 @@ impl P2PNode {
                             request_response::Event::Message { message, peer, .. }
                         ))) => {
                             tracing::info!("RequestResponse message received");
+                            remember_connected_peer(&mut connected_peers, &mut peers, peer);
                             match message {
                                 request_response::Message::Request {
                                     request, channel, ..
@@ -1153,5 +1169,22 @@ impl P2PNode {
         let (resp_tx, resp_rx) = oneshot::channel();
         let _ = self.cmd_tx.send(SwarmCommand::Stop { resp: resp_tx }).await;
         let _ = resp_rx.await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inbound_request_peer_is_remembered_for_later_outbound_replies() {
+        let peer = PeerId::random();
+        let mut connected_peers = HashMap::new();
+        let mut peers = HashMap::new();
+
+        remember_connected_peer(&mut connected_peers, &mut peers, peer);
+
+        assert_eq!(connected_peers.get(&peer.to_string()), Some(&peer));
+        assert!(peers.contains_key(&peer.to_string()));
     }
 }

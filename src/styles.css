@@ -294,6 +294,7 @@ body {
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background var(--transition-base);
+  overflow: hidden;
 }
 
 .peer-item:hover {
@@ -333,8 +334,10 @@ body {
 
 .peer-info {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
 .peer-name {
@@ -349,6 +352,10 @@ body {
 .peer-status {
   font-size: var(--font-size-sm);
   color: var(--color-accent-green);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .chat-area {
