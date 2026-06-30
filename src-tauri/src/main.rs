@@ -2,15 +2,17 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 mod db;
 mod file;
 mod p2p;
 
-use db::{Database, MessageRecord, GroupRecord, GroupMemberRecord, GroupMessageRecord};
-use p2p::{P2PNode, GroupMessage};
+use db::{Database, GroupMemberRecord, GroupMessageRecord, GroupRecord, MessageRecord};
+use libp2p::identity::Keypair;
+use p2p::file_transfer::{FileTransferEvent, IncomingFileTarget};
+use p2p::{GroupMessage, GroupNetworkEvent, GroupSyncMember, P2PNode};
 
 #[derive(Clone, Serialize)]
 struct MessagePayload {
@@ -20,11 +22,22 @@ struct MessagePayload {
 
 #[derive(Clone, Serialize)]
 struct FilePayload {
+    file_id: String,
     from: String,
     from_name: String,
     filename: String,
     file_path: String,
     timestamp: u64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum GroupEventPayload {
+    Chat { group_id: String, passcode: String, group_name: String, creator_peer: String, from_peer: String, from_name: String, content: String, timestamp: i64 },
+    Join { group_id: String, passcode: String, group_name: String, creator_peer: String, peer_id: String, peer_name: String, joined_at: i64 },
+    Leave { group_id: String, peer_id: String },
+    Dissolve { group_id: String },
+    Sync { group_id: String, passcode: String, group_name: String, creator_peer: String, members: Vec<GroupSyncMember> },
 }
 
 struct AppState {
@@ -49,16 +62,42 @@ struct GroupInfo {
     member_count: i64,
 }
 
+fn parse_file_offer(content: &str) -> Option<(String, String, u64, String)> {
+    let payload = content.strip_prefix("[FILE]")?;
+    let mut parts = payload.splitn(4, '|');
+    let file_id = parts.next()?.to_string();
+    let filename = parts.next()?.to_string();
+    let file_size = parts.next()?.parse().ok()?;
+    let sha256 = parts.next()?.to_string();
+    Some((file_id, filename, file_size, sha256))
+}
+
+fn load_or_create_identity(db: &Database) -> Result<Keypair, String> {
+    if let Some(encoded) = db.get_user_config("identity_key").map_err(|e| e.to_string())? {
+        let bytes = hex::decode(&encoded).map_err(|e| e.to_string())?;
+        return Keypair::from_protobuf_encoding(&bytes).map_err(|e| e.to_string());
+    }
+
+    let identity = Keypair::generate_ed25519();
+    let encoded = identity.to_protobuf_encoding().map_err(|e| e.to_string())?;
+    db.set_user_config("identity_key", &hex::encode(encoded))
+        .map_err(|e| e.to_string())?;
+    Ok(identity)
+}
+
 #[tauri::command]
 async fn start_node(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     name: String,
     on_message: tauri::ipc::Channel<MessagePayload>,
     on_file: tauri::ipc::Channel<FilePayload>,
+    on_group_event: tauri::ipc::Channel<GroupEventPayload>,
+    on_file_transfer: tauri::ipc::Channel<FileTransferEvent>,
 ) -> Result<String, String> {
     let mut node_guard = state.node.lock().await;
-    let mut node = P2PNode::new(name.clone()).await.map_err(|e| e.to_string())?;
+    let identity = load_or_create_identity(&state.db)?;
+    let mut node = P2PNode::new(name.clone(), identity).await.map_err(|e| e.to_string())?;
     let peer_id = node.peer_id();
 
     state
@@ -88,16 +127,37 @@ async fn start_node(
                     tracing::info!("Message to_peer: {}, content: {}", to_peer, msg.content);
                     let record = MessageRecord {
                         id: uuid::Uuid::new_v4().to_string(),
-                        from_peer: msg.from,
-                        from_name: msg.from_name,
-                        to_peer,
-                        content: msg.content,
+                        from_peer: msg.from.clone(),
+                        from_name: msg.from_name.clone(),
+                        to_peer: to_peer.clone(),
+                        content: msg.content.clone(),
                         timestamp: msg.timestamp as i64,
                         is_read: false,
                     };
                     match db.save_message(&record) {
                         Ok(_) => {
                             tracing::info!("Message saved to DB, sending via channel...");
+                            if let Some((file_id, filename, file_size, sha256)) = parse_file_offer(&msg.content) {
+                                let file_record = db::FileRecord {
+                                    id: file_id,
+                                    from_peer: msg.from,
+                                    to_peer,
+                                    filename,
+                                    file_size: file_size as i64,
+                                    status: "pending".to_string(),
+                                    timestamp: msg.timestamp as i64,
+                                    local_path: None,
+                                    temp_path: None,
+                                    total_bytes: file_size as i64,
+                                    received_bytes: 0,
+                                    sha256: Some(sha256),
+                                    error_message: None,
+                                    updated_at: chrono::Utc::now().timestamp(),
+                                };
+                                if let Err(e) = db.save_file_record(&file_record) {
+                                    tracing::error!("Failed to save file record: {}", e);
+                                }
+                            }
                             let payload = MessagePayload {
                                 record,
                                 is_new: true,
@@ -120,6 +180,7 @@ async fn start_node(
 
     let file_rx = node.take_file_receiver();
     if let Some(mut file_rx) = file_rx {
+        let file_db = state.db.clone();
         tokio::spawn(async move {
             tracing::info!("File receiver task started");
             while let Some(file) = file_rx.recv().await {
@@ -129,7 +190,9 @@ async fn start_node(
                 match std::fs::write(&file_path, &file.data) {
                     Ok(_) => {
                         tracing::info!("File saved to {:?}", file_path);
+                        let _ = file_db.update_file_status(&file.file_id, "completed");
                         let payload = FilePayload {
+                            file_id: file.file_id,
                             from: file.from,
                             from_name: file.from_name,
                             filename: file.filename,
@@ -144,6 +207,162 @@ async fn start_node(
                 }
             }
             tracing::info!("File receiver task ended");
+        });
+    }
+
+    let transfer_rx = node.take_file_transfer_receiver();
+    if let Some(mut transfer_rx) = transfer_rx {
+        let transfer_db = state.db.clone();
+        tokio::spawn(async move {
+            tracing::info!("File transfer receiver task started");
+            while let Some(event) = transfer_rx.recv().await {
+                match &event {
+                    FileTransferEvent::Progress {
+                        file_id,
+                        status,
+                        received_size,
+                        ..
+                    } => {
+                        if let Err(e) = transfer_db.update_file_progress(file_id, status, *received_size as i64, None) {
+                            tracing::error!("Failed to update file progress: {}", e);
+                        }
+                    }
+                    FileTransferEvent::Completed { file_id, file_path } => {
+                        if let Err(e) = transfer_db.update_file_paths(file_id, Some(file_path), None) {
+                            tracing::error!("Failed to update completed file path: {}", e);
+                        }
+                        if let Err(e) = transfer_db.update_file_status(file_id, "completed") {
+                            tracing::error!("Failed to update completed file status: {}", e);
+                        }
+                    }
+                    FileTransferEvent::Failed { file_id, error_message } => {
+                        if let Err(e) = transfer_db.update_file_progress(file_id, "failed", 0, Some(error_message)) {
+                            tracing::error!("Failed to update failed file status: {}", e);
+                        }
+                    }
+                    FileTransferEvent::Cancelled { file_id } => {
+                        if let Err(e) = transfer_db.update_file_status(file_id, "cancelled") {
+                            tracing::error!("Failed to update cancelled file status: {}", e);
+                        }
+                    }
+                }
+                if let Err(e) = on_file_transfer.send(event) {
+                    tracing::error!("Failed to send file transfer event: {}", e);
+                }
+            }
+            tracing::info!("File transfer receiver task ended");
+        });
+    }
+
+    let group_rx = node.take_group_receiver();
+    if let Some(mut group_rx) = group_rx {
+        let group_db = state.db.clone();
+        let group_node_peer_id = peer_id.clone();
+        tokio::spawn(async move {
+            tracing::info!("Group receiver task started");
+            while let Some(event) = group_rx.recv().await {
+                match event {
+                    GroupNetworkEvent::Event {
+                        topic: _,
+                        group_id,
+                        passcode,
+                        group_name,
+                        creator_peer,
+                        message,
+                    } => {
+                        match message {
+                            GroupMessage::Chat { from, from_name, content, timestamp } => {
+                                if from != group_node_peer_id {
+                                    let record = GroupMessageRecord {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        group_id: group_id.clone(),
+                                        from_peer: from.clone(),
+                                        from_name: from_name.clone(),
+                                        content: content.clone(),
+                                        timestamp: timestamp as i64,
+                                    };
+                                    let _ = group_db.save_group_message(&record);
+                                    let payload = GroupEventPayload::Chat {
+                                        group_id,
+                                        passcode,
+                                        group_name,
+                                        creator_peer,
+                                        from_peer: from,
+                                        from_name,
+                                        content,
+                                        timestamp: timestamp as i64,
+                                    };
+                                    let _ = on_group_event.send(payload);
+                                }
+                            }
+                            GroupMessage::Join { peer_id, peer_name } => {
+                                let record = GroupMemberRecord {
+                                    group_id: group_id.clone(),
+                                    peer_id: peer_id.clone(),
+                                    peer_name: Some(peer_name.clone()),
+                                    joined_at: chrono::Utc::now().timestamp(),
+                                };
+                                let _ = group_db.upsert_group_member(&record);
+                                let payload = GroupEventPayload::Join {
+                                    group_id,
+                                    passcode,
+                                    group_name,
+                                    creator_peer,
+                                    peer_id,
+                                    peer_name,
+                                    joined_at: chrono::Utc::now().timestamp(),
+                                };
+                                let _ = on_group_event.send(payload);
+                            }
+                            GroupMessage::Leave { peer_id } => {
+                                let _ = group_db.remove_group_member(&group_id, &peer_id);
+                                let payload = GroupEventPayload::Leave { group_id, peer_id };
+                                let _ = on_group_event.send(payload);
+                            }
+                            GroupMessage::Dissolve => {
+                                let _ = group_db.delete_group(&group_id);
+                                let payload = GroupEventPayload::Dissolve { group_id };
+                                let _ = on_group_event.send(payload);
+                            }
+                        }
+                    }
+                    GroupNetworkEvent::Sync {
+                        passcode,
+                        group_id,
+                        name,
+                        creator_peer,
+                        members,
+                    } => {
+                        let record = GroupRecord {
+                            id: group_id.clone(),
+                            name: name.clone(),
+                            passcode: passcode.clone(),
+                            topic: format!("local-in-group-{passcode}"),
+                            creator_peer: creator_peer.clone(),
+                            created_at: chrono::Utc::now().timestamp(),
+                        };
+                        let _ = group_db.upsert_group(&record);
+                        for member in &members {
+                            let member_record = GroupMemberRecord {
+                                group_id: group_id.clone(),
+                                peer_id: member.peer_id.clone(),
+                                peer_name: Some(member.peer_name.clone()),
+                                joined_at: member.joined_at,
+                            };
+                            let _ = group_db.upsert_group_member(&member_record);
+                        }
+                        let payload = GroupEventPayload::Sync {
+                            group_id,
+                            passcode,
+                            group_name: name,
+                            creator_peer,
+                            members,
+                        };
+                        let _ = on_group_event.send(payload);
+                    }
+                }
+            }
+            tracing::info!("Group receiver task ended");
         });
     }
 
@@ -181,6 +400,10 @@ async fn update_name(
         .db
         .set_user_config("name", &new_name)
         .map_err(|e| e.to_string())?;
+    let mut node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_mut() {
+        node.update_name(&new_name).await?;
+    }
     Ok(())
 }
 
@@ -359,22 +582,87 @@ async fn send_file(
     let node_guard = state.node.lock().await;
     if let Some(node) = node_guard.as_ref() {
         let filename = file::get_filename(&path);
-        let file_data = file::read_file_data(&path).await?;
-        let file_size = file_data.len() as i64;
-        let file_id = node.send_file(peer_id.clone(), filename.clone(), file_data).await?;
+        let metadata = tokio::fs::metadata(&path).await.map_err(|e| e.to_string())?;
+        let file_size = metadata.len();
+        let file_id = uuid::Uuid::new_v4().to_string();
+        let sha256 = p2p::file_transfer::sha256_file(&path).await.map_err(|e| e.to_string())?;
+        let file_id = node
+            .send_file(peer_id.clone(), filename.clone(), file_id.clone(), file_size, sha256.clone(), path.clone())
+            .await?;
 
         let record = db::FileRecord {
             id: file_id.clone(),
             from_peer: node.peer_id(),
             to_peer: peer_id,
             filename,
-            file_size,
-            status: "sending".to_string(),
+            file_size: file_size as i64,
+            status: "pending".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
+            local_path: Some(path.to_string_lossy().to_string()),
+            temp_path: None,
+            total_bytes: file_size as i64,
+            received_bytes: 0,
+            sha256: Some(sha256),
+            error_message: None,
+            updated_at: chrono::Utc::now().timestamp(),
         };
         let _ = state.db.save_file_record(&record);
 
         Ok(file_id)
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
+async fn cancel_file_transfer(
+    state: tauri::State<'_, AppState>,
+    file_id: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        node.cancel_file_transfer(&file_id).await?;
+        state
+            .db
+            .update_file_status(&file_id, "cancelled")
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("Node not started".to_string())
+    }
+}
+
+#[tauri::command]
+async fn retry_file_transfer(
+    state: tauri::State<'_, AppState>,
+    file_id: String,
+) -> Result<(), String> {
+    let node_guard = state.node.lock().await;
+    if let Some(node) = node_guard.as_ref() {
+        let record = state
+            .db
+            .get_file_record(&file_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "File record not found".to_string())?;
+        let download_dir = dirs::download_dir().unwrap_or_default();
+        let temp_path = record
+            .temp_path
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| download_dir.join(format!("{}.localin.part", record.filename)));
+        let temp_len = tokio::fs::metadata(&temp_path).await.map(|m| m.len()).unwrap_or(0);
+        let resume_offset = p2p::file_transfer::trusted_resume_offset(record.received_bytes as u64, temp_len);
+        let target = IncomingFileTarget {
+            file_id: file_id.clone(),
+            from_peer: record.from_peer,
+            resume_offset,
+        };
+        node.retry_file_transfer(target).await?;
+        state
+            .db
+            .update_file_progress(&file_id, "transferring", resume_offset as i64, None)
+            .map_err(|e| e.to_string())?;
+        Ok(())
     } else {
         Err("Node not started".to_string())
     }
@@ -399,7 +687,22 @@ async fn accept_file(
 ) -> Result<(), String> {
     let node_guard = state.node.lock().await;
     if let Some(node) = node_guard.as_ref() {
-        node.accept_file(&file_id, &from_peer).await?;
+        let record = state
+            .db
+            .get_file_record(&file_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "File record not found".to_string())?;
+        let download_dir = dirs::download_dir().unwrap_or_default();
+        let temp_path = record
+            .temp_path
+            .clone()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| download_dir.join(format!("{}.localin.part", record.filename)));
+        let temp_len = tokio::fs::metadata(&temp_path).await.map(|m| m.len()).unwrap_or(0);
+        let resume_offset = p2p::file_transfer::trusted_resume_offset(record.received_bytes as u64, temp_len);
+        node.accept_file(&file_id, &from_peer, resume_offset).await?;
+        state.db.update_file_paths(&file_id, None, Some(&temp_path.to_string_lossy())).map_err(|e| e.to_string())?;
+        state.db.update_file_progress(&file_id, "transferring", resume_offset as i64, None).map_err(|e| e.to_string())?;
         Ok(())
     } else {
         Err("Node not started".to_string())
@@ -447,6 +750,16 @@ async fn create_group(
     state.db.add_group_member(&member).map_err(|e| e.to_string())?;
 
     node.subscribe_group(&topic).await?;
+
+    let my_name = state.db.get_user_config("name").map_err(|e| e.to_string())?;
+    let members = vec![GroupSyncMember {
+        peer_id: creator_peer.clone(),
+        peer_name: my_name.unwrap_or_else(|| "Anonymous".to_string()),
+        joined_at: chrono::Utc::now().timestamp(),
+    }];
+    node.broadcast_group_info(&passcode, &group_id, &name, &creator_peer, members)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(GroupInfo {
         id: group_id,
@@ -497,6 +810,10 @@ async fn join_group(
 
     node.send_group_message(
         &topic,
+        &group.id,
+        &group.passcode,
+        &group.name,
+        &group.creator_peer,
         GroupMessage::Join {
             peer_id: peer_id.clone(),
             peer_name: peer_name.unwrap_or_else(|| "Anonymous".to_string()),
@@ -544,7 +861,14 @@ async fn send_group_message_cmd(
         content: content.clone(),
         timestamp,
     };
-    node.send_group_message(&group.topic, msg).await?;
+    node.send_group_message(
+        &group.topic,
+        &group.id,
+        &group.passcode,
+        &group.name,
+        &group.creator_peer,
+        msg,
+    ).await?;
 
     let record = GroupMessageRecord {
         id: uuid::Uuid::new_v4().to_string(),
@@ -595,6 +919,11 @@ async fn get_group_messages_cmd(
 }
 
 #[tauri::command]
+async fn get_group_members(state: tauri::State<'_, AppState>, group_id: String) -> Result<Vec<GroupMemberRecord>, String> {
+    state.db.get_group_members(&group_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn dissolve_group(
     state: tauri::State<'_, AppState>,
     group_id: String,
@@ -611,8 +940,15 @@ async fn dissolve_group(
         return Err("Only the creator can dissolve the group".to_string());
     }
 
-    node.send_group_message(&group.topic, GroupMessage::Dissolve)
-        .await?;
+    node.send_group_message(
+        &group.topic,
+        &group.id,
+        &group.passcode,
+        &group.name,
+        &group.creator_peer,
+        GroupMessage::Dissolve,
+    )
+    .await?;
 
     node.unsubscribe_group(&group.topic).await?;
 
@@ -636,6 +972,10 @@ async fn leave_group(
 
     node.send_group_message(
         &group.topic,
+        &group.id,
+        &group.passcode,
+        &group.name,
+        &group.creator_peer,
         GroupMessage::Leave {
             peer_id: node.peer_id(),
         },
@@ -693,6 +1033,8 @@ fn main() {
             get_dm_messages,
             get_saved_name,
             send_file,
+            cancel_file_transfer,
+            retry_file_transfer,
             accept_file,
             get_file_stat,
             get_file_history,
@@ -701,10 +1043,26 @@ fn main() {
             send_group_message_cmd,
             get_groups,
             get_group_messages_cmd,
+            get_group_members,
             dissolve_group,
             leave_group,
             stop_node
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identity_round_trip_preserves_peer_id() {
+        let identity = Keypair::generate_ed25519();
+        let peer_id = identity.public().to_peer_id();
+        let encoded = identity.to_protobuf_encoding().unwrap();
+        let decoded = Keypair::from_protobuf_encoding(&encoded).unwrap();
+
+        assert_eq!(decoded.public().to_peer_id(), peer_id);
+    }
 }

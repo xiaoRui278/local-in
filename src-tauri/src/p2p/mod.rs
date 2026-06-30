@@ -1,18 +1,22 @@
+pub mod file_transfer;
+
+use async_trait::async_trait;
+use file_transfer::FileTransferEvent;
 use libp2p::{
-    futures::{StreamExt, AsyncReadExt, AsyncWriteExt, AsyncRead, AsyncWrite},
+    futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
+    identity::Keypair,
     mdns, noise, request_response,
     swarm::SwarmEvent,
     tcp, yamux, Multiaddr, PeerId,
 };
+use libp2p_stream as stream;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
-use std::sync::Arc;
 use std::time::SystemTime;
-use tokio::sync::{mpsc, oneshot, Mutex};
-use async_trait::async_trait;
+use tokio::sync::{mpsc, oneshot};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PeerInfo {
     pub peer_id: String,
     pub name: String,
@@ -32,6 +36,7 @@ pub struct ChatMessage {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileReceived {
+    pub file_id: String,
     pub from: String,
     pub from_name: String,
     pub filename: String,
@@ -39,7 +44,13 @@ pub struct FileReceived {
     pub timestamp: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+struct IncomingFile {
+    filename: String,
+    chunks: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupMessage {
     Chat {
         from: String,
@@ -58,8 +69,35 @@ pub enum GroupMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GroupSyncMember {
+    pub peer_id: String,
+    pub peer_name: String,
+    pub joined_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GroupNetworkEvent {
+    Event {
+        topic: String,
+        group_id: String,
+        passcode: String,
+        group_name: String,
+        creator_peer: String,
+        message: GroupMessage,
+    },
+    Sync {
+        passcode: String,
+        group_id: String,
+        name: String,
+        creator_peer: String,
+        members: Vec<GroupSyncMember>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ChatRequest {
     SendMessage(String),
+    PeerInfo(PeerInfo),
     FileOffer {
         from: String,
         from_name: String,
@@ -67,20 +105,38 @@ pub enum ChatRequest {
         file_id: String,
         filename: String,
         file_size: u64,
+        sha256: String,
         timestamp: u64,
     },
     FileAccept {
         file_id: String,
         from: String,
+        resume_offset: u64,
     },
     FileData {
         file_id: String,
+        filename: String,
         data: String,
         is_last: bool,
     },
     FileReject {
         file_id: String,
         from: String,
+    },
+    GroupEvent {
+        topic: String,
+        group_id: String,
+        passcode: String,
+        group_name: String,
+        creator_peer: String,
+        message: GroupMessage,
+    },
+    GroupInfoSync {
+        passcode: String,
+        group_id: String,
+        name: String,
+        creator_peer: String,
+        members: Vec<GroupSyncMember>,
     },
 }
 
@@ -178,15 +234,27 @@ enum SwarmCommand {
         content: String,
         resp: oneshot::Sender<Result<(), String>>,
     },
-    SendFile {
+    SendFileOffer {
         peer_id: String,
         filename: String,
-        file_data: Vec<u8>,
+        file_id: String,
+        file_size: u64,
+        sha256: String,
+        source_path: std::path::PathBuf,
         resp: oneshot::Sender<Result<String, String>>,
     },
     AcceptFile {
         file_id: String,
         from_peer: String,
+        resume_offset: u64,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    CancelFileTransfer {
+        file_id: String,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    RetryFileTransfer {
+        target: file_transfer::IncomingFileTarget,
         resp: oneshot::Sender<Result<(), String>>,
     },
     GetPeers {
@@ -210,11 +278,27 @@ enum SwarmCommand {
     },
     SendGroupMessage {
         topic: String,
+        group_id: String,
+        passcode: String,
+        group_name: String,
+        creator_peer: String,
         message: GroupMessage,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    BroadcastGroupInfo {
+        passcode: String,
+        group_id: String,
+        name: String,
+        creator_peer: String,
+        members: Vec<GroupSyncMember>,
         resp: oneshot::Sender<Result<(), String>>,
     },
     BroadcastPeerInfo {
         resp: oneshot::Sender<()>,
+    },
+    UpdateName {
+        new_name: String,
+        resp: oneshot::Sender<Result<(), String>>,
     },
     Stop {
         resp: oneshot::Sender<()>,
@@ -225,19 +309,21 @@ enum SwarmCommand {
 struct LocalInBehaviour {
     mdns: mdns::tokio::Behaviour,
     request_response: request_response::Behaviour<ChatCodec>,
+    stream: stream::Behaviour,
 }
 
 pub struct P2PNode {
     peer_id: String,
-    name: String,
     cmd_tx: mpsc::Sender<SwarmCommand>,
     received_msg_rx: Option<mpsc::Receiver<ChatMessage>>,
     received_file_rx: Option<mpsc::Receiver<FileReceived>>,
+    received_group_rx: Option<mpsc::Receiver<GroupNetworkEvent>>,
+    received_file_transfer_rx: Option<mpsc::Receiver<FileTransferEvent>>,
 }
 
 impl P2PNode {
-    pub async fn new(name: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    pub async fn new(name: String, identity: Keypair) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(identity)
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
@@ -258,9 +344,12 @@ impl P2PNode {
                     request_response::Config::default(),
                 );
 
+                let stream = stream::Behaviour::new();
+
                 Ok(LocalInBehaviour {
                     mdns,
                     request_response,
+                    stream,
                 })
             })?
             .with_swarm_config(|cfg| {
@@ -276,18 +365,44 @@ impl P2PNode {
         let (cmd_tx, cmd_rx) = mpsc::channel(32);
         let (received_msg_tx, received_msg_rx) = mpsc::channel(256);
         let (received_file_tx, received_file_rx) = mpsc::channel(16);
+        let (received_group_tx, received_group_rx) = mpsc::channel(256);
+        let (file_transfer_tx, received_file_transfer_rx) = mpsc::channel(256);
+
+        let stream_control = swarm.behaviour().stream.new_control();
+        let mut incoming_file_streams = stream_control.clone().accept(file_transfer::FILE_PROTOCOL)?;
+        let inbound_transfer_tx = file_transfer_tx.clone();
+        tokio::spawn(async move {
+            while let Some((peer_id, stream)) = incoming_file_streams.next().await {
+                let transfer_tx = inbound_transfer_tx.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = file_transfer::receive_file_stream(peer_id.to_string(), stream, transfer_tx).await {
+                        tracing::error!("Inbound file stream failed: {}", e);
+                    }
+                });
+            }
+        });
 
         let node_name = name.clone();
         tokio::spawn(async move {
-            Self::run_swarm_loop(swarm, cmd_rx, received_msg_tx, received_file_tx, node_name).await;
+            Self::run_swarm_loop(
+                swarm,
+                cmd_rx,
+                received_msg_tx,
+                received_file_tx,
+                received_group_tx,
+                file_transfer_tx,
+                stream_control,
+                node_name,
+            ).await;
         });
 
         Ok(Self {
             peer_id,
-            name,
             cmd_tx,
             received_msg_rx: Some(received_msg_rx),
             received_file_rx: Some(received_file_rx),
+            received_group_rx: Some(received_group_rx),
+            received_file_transfer_rx: Some(received_file_transfer_rx),
         })
     }
 
@@ -296,12 +411,18 @@ impl P2PNode {
         mut cmd_rx: mpsc::Receiver<SwarmCommand>,
         received_msg_tx: mpsc::Sender<ChatMessage>,
         received_file_tx: mpsc::Sender<FileReceived>,
-        name: String,
+        received_group_tx: mpsc::Sender<GroupNetworkEvent>,
+        file_transfer_tx: mpsc::Sender<FileTransferEvent>,
+        stream_control: stream::Control,
+        mut name: String,
     ) {
         let local_peer_id = swarm.local_peer_id().to_string();
         let mut peers: HashMap<String, PeerInfo> = HashMap::new();
         let mut connected_peers: HashMap<String, PeerId> = HashMap::new();
-        let pending_files: Arc<Mutex<HashMap<String, Vec<u8>>>> = Arc::new(Mutex::new(HashMap::new()));
+        let mut outgoing_files: HashMap<String, file_transfer::OutgoingFile> = HashMap::new();
+        let mut cancel_txs: HashMap<String, tokio::sync::watch::Sender<bool>> = HashMap::new();
+        let mut incoming_files: HashMap<String, IncomingFile> = HashMap::new();
+        let mut subscribed_topics: HashSet<String> = HashSet::new();
 
         loop {
             tokio::select! {
@@ -324,18 +445,13 @@ impl P2PNode {
                                 peers.insert(peer_id.to_string(), info);
                                 tracing::info!("Total peers: {}", peers.len());
 
-                                let name_msg = ChatMessage {
-                                    from: local_peer_id.clone(),
-                                    from_name: name.clone(),
-                                    content: String::new(),
-                                    timestamp: SystemTime::now()
-                                        .duration_since(SystemTime::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs(),
-                                    to_peer: String::new(),
+                                let local_info = PeerInfo {
+                                    peer_id: local_peer_id.clone(),
+                                    name: name.clone(),
+                                    avatar: "🐱".to_string(),
+                                    online: true,
                                 };
-                                let data = serde_json::to_string(&name_msg).unwrap();
-                                let request = ChatRequest::SendMessage(data);
+                                let request = ChatRequest::PeerInfo(local_info);
                                 let peer_id_copy = peer_id;
                                 swarm
                                     .behaviour_mut()
@@ -379,37 +495,149 @@ impl P2PNode {
                                                 }
                                             }
                                         }
-                                        ChatRequest::FileOffer { from, from_name, to, file_id, filename, file_size, timestamp } => {
+                                        ChatRequest::PeerInfo(info) => {
+                                            tracing::info!("Received PeerInfo from {}: {}", info.peer_id, info.name);
+                                            peers.insert(info.peer_id.clone(), info);
+                                        }
+                                        ChatRequest::FileOffer { from, from_name, to, file_id, filename, file_size, sha256, timestamp } => {
                                             tracing::info!("File offer from {}: {} ({} bytes)", from_name, filename, file_size);
                                             let msg = ChatMessage {
                                                 from: from.clone(),
                                                 from_name: from_name.clone(),
-                                                content: format!("[FILE]{}|{}|{}", file_id, filename, file_size),
+                                                content: format!("[FILE]{}|{}|{}|{}", file_id, filename, file_size, sha256),
                                                 timestamp,
                                                 to_peer: to,
                                             };
                                             let _ = received_msg_tx.try_send(msg);
                                         }
-                                        ChatRequest::FileAccept { file_id, from } => {
-                                            tracing::info!("File accepted: {} by {}", file_id, from);
-                                            pending_files.lock().await.remove(&file_id);
-                                        }
-                                        ChatRequest::FileData { file_id, data, is_last } => {
-                                            tracing::info!("File data received for {}: is_last={}", file_id, is_last);
-                                            if let Ok(file_data) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &data) {
-                                                let file_received = FileReceived {
-                                                    from: peer.to_string(),
-                                                    from_name: String::new(),
-                                                    filename: file_id.clone(),
-                                                    data: file_data,
-                                                    timestamp: 0,
-                                                };
-                                                let _ = received_file_tx.try_send(file_received);
+                                        ChatRequest::FileAccept { file_id, from, resume_offset } => {
+                                            tracing::info!("File accepted: {} by {} from offset {}", file_id, from, resume_offset);
+                                            if let Some(target_peer_id) = connected_peers.get(&from) {
+                                                if let Some(mut outgoing_file) = outgoing_files.get(&file_id).cloned() {
+                                                    outgoing_file.resume_offset = resume_offset;
+                                                    let peer_id_copy = *target_peer_id;
+                                                    let mut control = stream_control.clone();
+                                                    let events = file_transfer_tx.clone();
+                                                    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+                                                    cancel_txs.insert(file_id.clone(), cancel_tx);
+                                                    tokio::spawn(async move {
+                                                        match control.open_stream(peer_id_copy, file_transfer::FILE_PROTOCOL).await {
+                                                            Ok(stream) => {
+                                                                if let Err(e) = file_transfer::send_file_stream(stream, outgoing_file.clone(), cancel_rx, events.clone()).await {
+                                                                    let _ = events.send(FileTransferEvent::Failed {
+                                                                        file_id: outgoing_file.file_id,
+                                                                        error_message: e.to_string(),
+                                                                    }).await;
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                let _ = events.send(FileTransferEvent::Failed {
+                                                                    file_id: outgoing_file.file_id,
+                                                                    error_message: e.to_string(),
+                                                                }).await;
+                                                            }
+                                                        }
+                                                    });
+                                                } else {
+                                                    tracing::error!("Outgoing file not found: {}", file_id);
+                                                }
+                                            } else {
+                                                tracing::error!("Target peer not found: {}", from);
                                             }
                                         }
-                                        ChatRequest::FileReject { file_id, from } => {
-                                            tracing::info!("File rejected: {} by {}", file_id, from);
-                                            pending_files.lock().await.remove(&file_id);
+                                        ChatRequest::FileData { file_id, filename, data, is_last } => {
+                                            tracing::info!("File data received for {}: is_last={}", file_id, is_last);
+
+                                            if !is_last {
+                                                // Add chunk to incoming file
+                                                incoming_files.entry(file_id.clone())
+                                                    .or_insert_with(|| IncomingFile {
+                                                        filename: filename.clone(),
+                                                        chunks: Vec::new(),
+                                                    })
+                                                    .chunks
+                                                    .push(data);
+                                            } else {
+                                                // Final chunk - assemble and decode
+                                                let incoming = if let Some(mut incoming) = incoming_files.remove(&file_id) {
+                                                    incoming.chunks.push(data);
+                                                    incoming
+                                                } else {
+                                                    IncomingFile {
+                                                        filename: filename.clone(),
+                                                        chunks: vec![data],
+                                                    }
+                                                };
+
+                                                let full_encoded = incoming.chunks.concat();
+                                                match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &full_encoded) {
+                                                    Ok(file_data) => {
+                                                        let timestamp = SystemTime::now()
+                                                            .duration_since(SystemTime::UNIX_EPOCH)
+                                                            .unwrap()
+                                                            .as_secs();
+
+                                                        let from_name = peers.get(&peer.to_string())
+                                                            .map(|p| p.name.clone())
+                                                            .unwrap_or_default();
+
+                                                        let filename = incoming.filename.clone();
+                                                        let file_len = file_data.len();
+
+                                                        let file_received = FileReceived {
+                                                            file_id,
+                                                            from: peer.to_string(),
+                                                            from_name,
+                                                            filename: filename.clone(),
+                                                            data: file_data,
+                                                            timestamp,
+                                                        };
+
+                                                        if let Err(e) = received_file_tx.try_send(file_received) {
+                                                            tracing::error!("Failed to send file received: {}", e);
+                                                        } else {
+                                                            tracing::info!("File assembly complete: {} ({} bytes)", filename, file_len);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("Failed to decode file data: {}", e);
+                                                        incoming_files.remove(&file_id);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        ChatRequest::FileReject { file_id, from: _ } => {
+                                            tracing::info!("File rejected: {}", file_id);
+                                        }
+                                        ChatRequest::GroupEvent { topic, group_id, passcode, group_name, creator_peer, message } => {
+                                            if subscribed_topics.contains(&topic) {
+                                                let event = GroupNetworkEvent::Event {
+                                                    topic,
+                                                    group_id,
+                                                    passcode,
+                                                    group_name,
+                                                    creator_peer,
+                                                    message,
+                                                };
+                                                if let Err(e) = received_group_tx.try_send(event) {
+                                                    tracing::error!("Failed to forward group event: {}", e);
+                                                }
+                                            }
+                                        }
+                                        ChatRequest::GroupInfoSync { passcode, group_id, name, creator_peer, members } => {
+                                            let topic = format!("local-in-group-{}", passcode);
+                                            if subscribed_topics.contains(&topic) {
+                                                let event = GroupNetworkEvent::Sync {
+                                                    passcode,
+                                                    group_id,
+                                                    name,
+                                                    creator_peer,
+                                                    members,
+                                                };
+                                                if let Err(e) = received_group_tx.try_send(event) {
+                                                    tracing::error!("Failed to forward group sync: {}", e);
+                                                }
+                                            }
                                         }
                                     }
                                     let _ = swarm
@@ -481,14 +709,18 @@ impl P2PNode {
                                 }
                             }
                         }
-                        Some(SwarmCommand::SendFile { peer_id, filename, file_data, resp }) => {
+                        Some(SwarmCommand::SendFileOffer { peer_id, filename, file_id, file_size, sha256, source_path, resp }) => {
                             tracing::info!("Sending file offer {} to {}", filename, peer_id);
                             if let Some(target_peer_id) = connected_peers.get(&peer_id) {
-                                let file_id = uuid::Uuid::new_v4().to_string();
-                                let file_size = file_data.len() as u64;
-                                
-                                pending_files.lock().await.insert(file_id.clone(), file_data);
-                                
+                                outgoing_files.insert(file_id.clone(), file_transfer::OutgoingFile {
+                                    file_id: file_id.clone(),
+                                    filename: filename.clone(),
+                                    path: source_path,
+                                    file_size,
+                                    sha256: sha256.clone(),
+                                    resume_offset: 0,
+                                });
+
                                 let request = ChatRequest::FileOffer {
                                     from: local_peer_id.clone(),
                                     from_name: name.clone(),
@@ -496,6 +728,7 @@ impl P2PNode {
                                     file_id: file_id.clone(),
                                     filename,
                                     file_size,
+                                    sha256,
                                     timestamp: SystemTime::now()
                                         .duration_since(SystemTime::UNIX_EPOCH)
                                         .unwrap()
@@ -515,56 +748,131 @@ impl P2PNode {
                             let _ = resp.send(peers.values().cloned().collect());
                         }
                         Some(SwarmCommand::BroadcastPeerInfo { resp }) => {
+                            let local_info = PeerInfo {
+                                peer_id: local_peer_id.clone(),
+                                name: name.clone(),
+                                avatar: "🐱".to_string(),
+                                online: true,
+                            };
+                            let request = ChatRequest::PeerInfo(local_info);
+                            for (_peer_str, peer_id) in connected_peers.iter() {
+                                let peer_id_copy = *peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request.clone());
+                            }
                             let _ = resp.send(());
                         }
-                        Some(SwarmCommand::AcceptFile { file_id, from_peer, resp }) => {
+                        Some(SwarmCommand::AcceptFile { file_id, from_peer, resume_offset, resp }) => {
                             tracing::info!("Accepting file {} from {}", file_id, from_peer);
                             if let Some(target_peer_id) = connected_peers.get(&from_peer) {
                                 let request = ChatRequest::FileAccept {
                                     file_id: file_id.clone(),
                                     from: local_peer_id.clone(),
+                                    resume_offset,
                                 };
                                 let peer_id_copy = *target_peer_id;
                                 swarm
                                     .behaviour_mut()
                                     .request_response
                                     .send_request(&peer_id_copy, request);
-                                
-                                if let Some(file_data) = pending_files.lock().await.remove(&file_id) {
-                                    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &file_data);
-                                    let chunk_size = 1024 * 1024;
-                                    let chunks: Vec<&str> = encoded.as_bytes().chunks(chunk_size).map(|c| std::str::from_utf8(c).unwrap()).collect();
-                                    for (i, chunk) in chunks.iter().enumerate() {
-                                        let request = ChatRequest::FileData {
-                                            file_id: file_id.clone(),
-                                            data: chunk.to_string(),
-                                            is_last: i == chunks.len() - 1,
-                                        };
-                                        let peer_id_copy = *target_peer_id;
-                                        swarm
-                                            .behaviour_mut()
-                                            .request_response
-                                            .send_request(&peer_id_copy, request);
-                                    }
-                                }
+
                                 let _ = resp.send(Ok(()));
                             } else {
                                 let _ = resp.send(Err("Peer not found".to_string()));
                             }
                         }
-                        Some(SwarmCommand::SubscribeGroup { resp, .. }) => {
+                        Some(SwarmCommand::CancelFileTransfer { file_id, resp }) => {
+                            if let Some(cancel_tx) = cancel_txs.remove(&file_id) {
+                                let _ = cancel_tx.send(true);
+                            }
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::UnsubscribeGroup { resp, .. }) => {
+                        Some(SwarmCommand::RetryFileTransfer { target, resp }) => {
+                            if let Some(target_peer_id) = connected_peers.get(&target.from_peer) {
+                                let request = ChatRequest::FileAccept {
+                                    file_id: target.file_id.clone(),
+                                    from: local_peer_id.clone(),
+                                    resume_offset: target.resume_offset,
+                                };
+                                let peer_id_copy = *target_peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request);
+                                let _ = resp.send(Ok(()));
+                            } else {
+                                let _ = resp.send(Err("Peer not found".to_string()));
+                            }
+                        }
+                        Some(SwarmCommand::SubscribeGroup { topic, resp }) => {
+                            subscribed_topics.insert(topic);
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::SubscribeDM { resp, .. }) => {
+                        Some(SwarmCommand::UnsubscribeGroup { topic, resp }) => {
+                            subscribed_topics.remove(&topic);
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::UnsubscribeDM { resp, .. }) => {
+                        Some(SwarmCommand::SubscribeDM { peer_id, resp }) => {
+                            tracing::debug!("Subscribe DM requested for {}", peer_id);
                             let _ = resp.send(Ok(()));
                         }
-                        Some(SwarmCommand::SendGroupMessage { resp, .. }) => {
+                        Some(SwarmCommand::UnsubscribeDM { peer_id, resp }) => {
+                            tracing::debug!("Unsubscribe DM requested for {}", peer_id);
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::SendGroupMessage { topic, group_id, passcode, group_name, creator_peer, message, resp }) => {
+                            let request = ChatRequest::GroupEvent {
+                                topic: topic.clone(),
+                                group_id: group_id.clone(),
+                                passcode: passcode.clone(),
+                                group_name: group_name.clone(),
+                                creator_peer: creator_peer.clone(),
+                                message,
+                            };
+                            for (_peer_str, peer_id) in connected_peers.iter() {
+                                let peer_id_copy = *peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request.clone());
+                            }
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::BroadcastGroupInfo { passcode, group_id, name, creator_peer, members, resp }) => {
+                            let request = ChatRequest::GroupInfoSync {
+                                passcode: passcode.clone(),
+                                group_id: group_id.clone(),
+                                name: name.clone(),
+                                creator_peer: creator_peer.clone(),
+                                members: members.clone(),
+                            };
+                            for (_peer_str, peer_id) in connected_peers.iter() {
+                                let peer_id_copy = *peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request.clone());
+                            }
+                            let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::UpdateName { new_name, resp }) => {
+                            name = new_name;
+                            let local_info = PeerInfo {
+                                peer_id: local_peer_id.clone(),
+                                name: name.clone(),
+                                avatar: "🐱".to_string(),
+                                online: true,
+                            };
+                            let request = ChatRequest::PeerInfo(local_info);
+                            for (_peer_str, peer_id) in connected_peers.iter() {
+                                let peer_id_copy = *peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request.clone());
+                            }
                             let _ = resp.send(Ok(()));
                         }
                         Some(SwarmCommand::Stop { resp }) => {
@@ -588,6 +896,14 @@ impl P2PNode {
 
     pub fn take_file_receiver(&mut self) -> Option<mpsc::Receiver<FileReceived>> {
         self.received_file_rx.take()
+    }
+
+    pub fn take_group_receiver(&mut self) -> Option<mpsc::Receiver<GroupNetworkEvent>> {
+        self.received_group_rx.take()
+    }
+
+    pub fn take_file_transfer_receiver(&mut self) -> Option<mpsc::Receiver<FileTransferEvent>> {
+        self.received_file_transfer_rx.take()
     }
 
     pub async fn get_peers(&self) -> Vec<PeerInfo> {
@@ -623,26 +939,54 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn subscribe_dm(&self, _peer_id: &str) -> Result<(), String> {
-        Ok(())
+    pub async fn subscribe_dm(&self, peer_id: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SubscribeDM {
+                peer_id: peer_id.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn unsubscribe_dm(&self, _peer_id: &str) -> Result<(), String> {
-        Ok(())
+    pub async fn unsubscribe_dm(&self, peer_id: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::UnsubscribeDM {
+                peer_id: peer_id.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
     }
 
     pub async fn send_file(
         &self,
         peer_id: String,
         filename: String,
-        file_data: Vec<u8>,
+        file_id: String,
+        file_size: u64,
+        sha256: String,
+        source_path: std::path::PathBuf,
     ) -> Result<String, String> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.cmd_tx
-            .send(SwarmCommand::SendFile {
+            .send(SwarmCommand::SendFileOffer {
                 peer_id,
                 filename,
-                file_data,
+                file_id,
+                file_size,
+                sha256,
+                source_path,
                 resp: resp_tx,
             })
             .await
@@ -653,12 +997,18 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn accept_file(&self, file_id: &str, from_peer: &str) -> Result<(), String> {
+    pub async fn accept_file(
+        &self,
+        file_id: &str,
+        from_peer: &str,
+        resume_offset: u64,
+    ) -> Result<(), String> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.cmd_tx
             .send(SwarmCommand::AcceptFile {
                 file_id: file_id.to_string(),
                 from_peer: from_peer.to_string(),
+                resume_offset,
                 resp: resp_tx,
             })
             .await
@@ -669,20 +1019,134 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn subscribe_group(&self, _topic: &str) -> Result<(), String> {
-        Ok(())
+    pub async fn cancel_file_transfer(&self, file_id: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::CancelFileTransfer {
+                file_id: file_id.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn unsubscribe_group(&self, _topic: &str) -> Result<(), String> {
-        Ok(())
+    pub async fn retry_file_transfer(&self, target: file_transfer::IncomingFileTarget) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::RetryFileTransfer {
+                target,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+
+    pub async fn update_name(&self, new_name: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::UpdateName {
+                new_name: new_name.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn subscribe_group(&self, topic: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SubscribeGroup {
+                topic: topic.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn unsubscribe_group(&self, topic: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::UnsubscribeGroup {
+                topic: topic.to_string(),
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
     }
 
     pub async fn send_group_message(
         &self,
-        _topic: &str,
-        _message: GroupMessage,
+        topic: &str,
+        group_id: &str,
+        passcode: &str,
+        group_name: &str,
+        creator_peer: &str,
+        message: GroupMessage,
     ) -> Result<(), String> {
-        Ok(())
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::SendGroupMessage {
+                topic: topic.to_string(),
+                group_id: group_id.to_string(),
+                passcode: passcode.to_string(),
+                group_name: group_name.to_string(),
+                creator_peer: creator_peer.to_string(),
+                message,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn broadcast_group_info(
+        &self,
+        passcode: &str,
+        group_id: &str,
+        name: &str,
+        creator_peer: &str,
+        members: Vec<GroupSyncMember>,
+    ) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::BroadcastGroupInfo {
+                passcode: passcode.to_string(),
+                group_id: group_id.to_string(),
+                name: name.to_string(),
+                creator_peer: creator_peer.to_string(),
+                members,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
     }
 
     pub async fn stop(&self) {

@@ -5,6 +5,8 @@ export interface Peer {
   online: boolean;
 }
 
+export type FileTransferStatus = "pending" | "hashing" | "transferring" | "completed" | "failed" | "cancelled";
+
 export interface MessageRecord {
   id: string;
   from_peer: string;
@@ -16,7 +18,12 @@ export interface MessageRecord {
   file_id?: string;
   file_name?: string;
   file_size?: number;
-  file_status?: "pending" | "transferring" | "completed";
+  file_status?: FileTransferStatus;
+  file_progress?: number;
+  received_size?: number;
+  transfer_speed?: number;
+  error_message?: string;
+  file_path?: string;
 }
 
 export interface GroupInfo {
@@ -52,6 +59,7 @@ export interface MessagePayload {
 }
 
 export interface FilePayload {
+  file_id: string;
   from: string;
   from_name: string;
   filename: string;
@@ -59,7 +67,87 @@ export interface FilePayload {
   timestamp: number;
 }
 
+export type TransferPhase = "hashing" | "transferring";
+
+export type FileTransferEvent =
+  | {
+      kind: "progress";
+      file_id: string;
+      status: FileTransferStatus;
+      phase: TransferPhase;
+      received_size: number;
+      total_size: number;
+      speed: number;
+    }
+  | {
+      kind: "completed";
+      file_id: string;
+      file_path: string;
+    }
+  | {
+      kind: "failed";
+      file_id: string;
+      error_message: string;
+    }
+  | {
+      kind: "cancelled";
+      file_id: string;
+    };
+
 export type Theme = "dark" | "light";
 export type ChatMode = "global" | "group";
 export type FontFamilyOption = "jetbrains" | "system";
 export type FontSizeOption = "12" | "14" | "16" | "18";
+
+export interface GroupMember {
+  group_id: string;
+  peer_id: string;
+  peer_name: string | null;
+  joined_at: number;
+}
+
+export interface GroupSyncMember {
+  peer_id: string;
+  peer_name: string;
+  joined_at: number;
+}
+
+export type GroupEventPayload =
+  | {
+      kind: "chat";
+      group_id: string;
+      passcode: string;
+      group_name: string;
+      creator_peer: string;
+      from_peer: string;
+      from_name: string;
+      content: string;
+      timestamp: number;
+    }
+  | {
+      kind: "join";
+      group_id: string;
+      passcode: string;
+      group_name: string;
+      creator_peer: string;
+      peer_id: string;
+      peer_name: string;
+      joined_at: number;
+    }
+  | {
+      kind: "leave";
+      group_id: string;
+      peer_id: string;
+    }
+  | {
+      kind: "dissolve";
+      group_id: string;
+    }
+  | {
+      kind: "sync";
+      group_id: string;
+      passcode: string;
+      group_name: string;
+      creator_peer: string;
+      members: GroupSyncMember[];
+    };

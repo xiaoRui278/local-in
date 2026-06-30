@@ -28,6 +28,8 @@ interface ChatAreaProps {
   onDissolveGroup: () => void;
   onLeaveGroup: () => void;
   onAcceptFile: (fileId: string, fromPeer: string, messageId: string) => void;
+  onCancelFileTransfer: (fileId: string) => void;
+  onRetryFileTransfer: (fileId: string) => void;
   formatTime: (timestamp: number) => string;
   getAvatarColor: (name: string) => string;
 }
@@ -38,6 +40,7 @@ export function ChatArea({
   globalMessagesRef, privateMessagesRef,
   onInputChange, onSend, onSendGlobal, onSendGroup, onFileSelect,
   onToggleMembers, onDissolveGroup, onLeaveGroup, onAcceptFile,
+  onCancelFileTransfer, onRetryFileTransfer,
   formatTime, getAvatarColor,
 }: ChatAreaProps) {
   const renderMessages = (msgs: MessageRecord[], isGlobal: boolean) => (
@@ -49,6 +52,8 @@ export function ChatArea({
             message={msg}
             isMine={msg.from_peer === myPeerId}
             onAccept={onAcceptFile}
+            onCancel={onCancelFileTransfer}
+            onRetry={onRetryFileTransfer}
           />
         ) : (
           <MessageBubble

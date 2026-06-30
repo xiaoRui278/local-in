@@ -24,6 +24,13 @@ pub struct FileRecord {
     pub file_size: i64,
     pub status: String,
     pub timestamp: i64,
+    pub local_path: Option<String>,
+    pub temp_path: Option<String>,
+    pub total_bytes: i64,
+    pub received_bytes: i64,
+    pub sha256: Option<String>,
+    pub error_message: Option<String>,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -146,6 +153,18 @@ impl Database {
             "ALTER TABLE messages ADD COLUMN from_name TEXT NOT NULL DEFAULT '';"
         );
 
+        for statement in [
+            "ALTER TABLE file_transfers ADD COLUMN local_path TEXT;",
+            "ALTER TABLE file_transfers ADD COLUMN temp_path TEXT;",
+            "ALTER TABLE file_transfers ADD COLUMN total_bytes INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE file_transfers ADD COLUMN received_bytes INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE file_transfers ADD COLUMN sha256 TEXT;",
+            "ALTER TABLE file_transfers ADD COLUMN error_message TEXT;",
+            "ALTER TABLE file_transfers ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;",
+        ] {
+            let _ = conn.execute_batch(statement);
+        }
+
         Ok(())
     }
 
@@ -208,8 +227,35 @@ impl Database {
     pub fn save_file_record(&self, record: &FileRecord) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO file_transfers (id, from_peer, to_peer, filename, file_size, status, timestamp) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            (&record.id, &record.from_peer, &record.to_peer, &record.filename, &record.file_size, &record.status, &record.timestamp),
+            "INSERT INTO file_transfers (
+                id, from_peer, to_peer, filename, file_size, status, timestamp,
+                local_path, temp_path, total_bytes, received_bytes, sha256, error_message, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                local_path = excluded.local_path,
+                temp_path = excluded.temp_path,
+                total_bytes = excluded.total_bytes,
+                received_bytes = excluded.received_bytes,
+                sha256 = excluded.sha256,
+                error_message = excluded.error_message,
+                updated_at = excluded.updated_at",
+            (
+                &record.id,
+                &record.from_peer,
+                &record.to_peer,
+                &record.filename,
+                &record.file_size,
+                &record.status,
+                &record.timestamp,
+                &record.local_path,
+                &record.temp_path,
+                &record.total_bytes,
+                &record.received_bytes,
+                &record.sha256,
+                &record.error_message,
+                &record.updated_at,
+            ),
         )?;
         Ok(())
     }
@@ -218,7 +264,11 @@ impl Database {
     pub fn get_file_records(&self, peer_id: &str) -> Result<Vec<FileRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, from_peer, to_peer, filename, file_size, status, timestamp FROM file_transfers WHERE from_peer = ?1 OR to_peer = ?1 ORDER BY timestamp DESC"
+            "SELECT id, from_peer, to_peer, filename, file_size, status, timestamp,
+                    local_path, temp_path, total_bytes, received_bytes, sha256, error_message, updated_at
+             FROM file_transfers
+             WHERE from_peer = ?1 OR to_peer = ?1
+             ORDER BY timestamp DESC"
         )?;
 
         let records = stmt
@@ -231,11 +281,81 @@ impl Database {
                     file_size: row.get(4)?,
                     status: row.get(5)?,
                     timestamp: row.get(6)?,
+                    local_path: row.get(7)?,
+                    temp_path: row.get(8)?,
+                    total_bytes: row.get(9)?,
+                    received_bytes: row.get(10)?,
+                    sha256: row.get(11)?,
+                    error_message: row.get(12)?,
+                    updated_at: row.get(13)?,
                 })
             })?
             .collect::<Result<Vec<_>>>()?;
 
         Ok(records)
+    }
+
+    pub fn get_file_record(&self, file_id: &str) -> Result<Option<FileRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, from_peer, to_peer, filename, file_size, status, timestamp,
+                    local_path, temp_path, total_bytes, received_bytes, sha256, error_message, updated_at
+             FROM file_transfers
+             WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query_map([file_id], |row| {
+            Ok(FileRecord {
+                id: row.get(0)?,
+                from_peer: row.get(1)?,
+                to_peer: row.get(2)?,
+                filename: row.get(3)?,
+                file_size: row.get(4)?,
+                status: row.get(5)?,
+                timestamp: row.get(6)?,
+                local_path: row.get(7)?,
+                temp_path: row.get(8)?,
+                total_bytes: row.get(9)?,
+                received_bytes: row.get(10)?,
+                sha256: row.get(11)?,
+                error_message: row.get(12)?,
+                updated_at: row.get(13)?,
+            })
+        })?;
+        match rows.next() {
+            Some(record) => Ok(Some(record?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn update_file_progress(&self, file_id: &str, status: &str, received_bytes: i64, error_message: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE file_transfers
+             SET status = ?1, received_bytes = ?2, error_message = ?3, updated_at = ?4
+             WHERE id = ?5",
+            (status, received_bytes, error_message, chrono::Utc::now().timestamp(), file_id),
+        )?;
+        Ok(())
+    }
+
+    pub fn update_file_paths(&self, file_id: &str, local_path: Option<&str>, temp_path: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE file_transfers
+             SET local_path = ?1, temp_path = ?2, updated_at = ?3
+             WHERE id = ?4",
+            (local_path, temp_path, chrono::Utc::now().timestamp(), file_id),
+        )?;
+        Ok(())
+    }
+
+    pub fn update_file_status(&self, file_id: &str, status: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE file_transfers SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            (status, chrono::Utc::now().timestamp(), file_id),
+        )?;
+        Ok(())
     }
 
     pub fn get_user_config(&self, key: &str) -> Result<Option<String>> {
@@ -264,6 +384,28 @@ impl Database {
         conn.execute(
             "INSERT INTO groups (id, name, passcode, topic, creator_peer, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             (&group.id, &group.name, &group.passcode, &group.topic, &group.creator_peer, &group.created_at),
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_group(&self, group: &GroupRecord) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO groups (id, name, passcode, topic, creator_peer, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                 name = excluded.name,
+                 passcode = excluded.passcode,
+                 topic = excluded.topic,
+                 creator_peer = excluded.creator_peer",
+            (
+                &group.id,
+                &group.name,
+                &group.passcode,
+                &group.topic,
+                &group.creator_peer,
+                &group.created_at,
+            ),
         )?;
         Ok(())
     }
@@ -351,6 +493,24 @@ impl Database {
         conn.execute(
             "INSERT OR IGNORE INTO group_members (group_id, peer_id, peer_name, joined_at) VALUES (?1, ?2, ?3, ?4)",
             (&member.group_id, &member.peer_id, &member.peer_name, &member.joined_at),
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_group_member(&self, member: &GroupMemberRecord) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO group_members (group_id, peer_id, peer_name, joined_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(group_id, peer_id) DO UPDATE SET
+                 peer_name = excluded.peer_name,
+                 joined_at = excluded.joined_at",
+            (
+                &member.group_id,
+                &member.peer_id,
+                &member.peer_name,
+                &member.joined_at,
+            ),
         )?;
         Ok(())
     }

@@ -151,6 +151,8 @@ function App() {
         onDissolveGroup={chat.handleDissolveGroup}
         onLeaveGroup={chat.handleLeaveGroup}
         onAcceptFile={chat.handleAcceptFile}
+        onCancelFileTransfer={chat.handleCancelFileTransfer}
+        onRetryFileTransfer={chat.handleRetryFileTransfer}
         formatTime={formatTime}
         getAvatarColor={getAvatarColor}
       />
@@ -159,6 +161,8 @@ function App() {
         show={showMembers}
         chatMode={chat.chatMode}
         peers={chat.peers}
+        selectedGroup={chat.selectedGroup}
+        groupMembers={chat.groupMembers}
         onToggle={() => setShowMembers(!showMembers)}
         onSelectPeer={handleSelectPrivate}
         getAvatarColor={getAvatarColor}

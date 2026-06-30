@@ -28,6 +28,7 @@ src-tauri/target/
 
 # AI generated (local only)
 AGENTS.md
+CLAUDE.md
 .sisyphus/
 .superpowers/
 docs/

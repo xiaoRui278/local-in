@@ -805,7 +805,8 @@ body {
   background: var(--color-surface-secondary);
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  min-width: 200px;
+  min-width: 260px;
+  max-width: 360px;
 }
 
 .file-icon {
@@ -833,9 +834,23 @@ body {
   margin-top: 2px;
 }
 
-.file-accept-btn {
-  padding: var(--space-1) var(--space-4);
+.file-progress {
+  height: 6px;
+  margin-top: var(--space-2);
+  background: var(--color-surface-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.file-progress-fill {
+  height: 100%;
   background: var(--color-accent-blue);
+  transition: width var(--transition-base);
+}
+
+.file-accept-btn,
+.file-secondary-btn {
+  padding: var(--space-1) var(--space-4);
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -846,11 +861,25 @@ body {
   flex-shrink: 0;
 }
 
+.file-accept-btn {
+  background: var(--color-accent-blue);
+}
+
+.file-secondary-btn {
+  background: var(--color-surface-tertiary);
+  color: var(--color-text-primary);
+}
+
 .file-accept-btn:hover {
   background: var(--color-accent-blue-hover);
 }
 
-.file-accept-btn:focus-visible {
+.file-secondary-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+.file-accept-btn:focus-visible,
+.file-secondary-btn:focus-visible {
   outline: 2px solid var(--color-accent-blue);
   outline-offset: 2px;
 }
@@ -859,6 +888,12 @@ body {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   flex-shrink: 0;
+}
+
+.file-error {
+  margin-top: var(--space-1);
+  color: var(--color-accent-red);
+  font-size: var(--font-size-sm);
 }
 
 .group-actions {

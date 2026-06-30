@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { Peer, MessageRecord, GroupInfo, GroupMessageRecord, ChatHistoryItem, MessagePayload, FilePayload } from "../types";
+import type { Peer, MessageRecord, GroupInfo, GroupMessageRecord, ChatHistoryItem, MessagePayload, FilePayload, GroupMember, GroupEventPayload, FileTransferEvent } from "../types";
 
 export function useChat() {
   const [name, setName] = useState("");
@@ -17,6 +17,7 @@ export function useChat() {
   const [globalMessages, setGlobalMessages] = useState<MessageRecord[]>([]);
   const [chatMode, setChatMode] = useState<"global" | "group">("global");
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember[]>>({});
 
   const globalMessagesRef = useRef<HTMLDivElement>(null);
   const privateMessagesRef = useRef<HTMLDivElement>(null);
@@ -73,8 +74,19 @@ export function useChat() {
     }
   }, []);
 
-  const handleStart = useCallback(async () => {
-    if (!name.trim()) return;
+  const loadGroupMembers = useCallback(async (groupId: string) => {
+    try {
+      const members = await invoke<GroupMember[]>("get_group_members", { groupId });
+      setGroupMembers((prev) => ({ ...prev, [groupId]: members }));
+    } catch (e) {
+      console.error("Failed to get group members:", e);
+    }
+  }, []);
+
+  const handleStart = useCallback(async (startName: string) => {
+    const trimmedName = startName.trim();
+    if (!trimmedName) return;
+    setName(trimmedName);
     try {
       const onMessage = new Channel<MessagePayload>();
       onMessage.onmessage = (payload) => {
@@ -82,14 +94,18 @@ export function useChat() {
 
         if (msg.content.startsWith("[FILE]")) {
           const parts = msg.content.substring(6).split("|");
-          if (parts.length === 3) {
+          if (parts.length >= 3) {
+            const fileSize = parseInt(parts[2], 10) || 0;
             const fileMsg: MessageRecord = {
               ...msg,
               content: msg.content,
               file_id: parts[0],
               file_name: parts[1],
-              file_size: parseInt(parts[2]),
+              file_size: fileSize,
               file_status: "pending",
+              file_progress: 0,
+              received_size: 0,
+              transfer_speed: 0,
             };
             if (msg.to_peer === myPeerIdRef.current) {
               setMessages((prev) => [...prev, fileMsg]);
@@ -103,20 +119,20 @@ export function useChat() {
           }
         }
 
-        if (msg.to_peer !== "global" && msg.to_peer !== "") {
+        // Only private messages go to chatHistory here - group messages handled separately
+        if (msg.to_peer !== "global" && msg.to_peer !== "" && !msg.to_peer.startsWith("group-")) {
           setChatHistory((prev) => {
             const peerId = msg.from_peer === myPeerIdRef.current ? msg.to_peer : msg.from_peer;
             const peerName = msg.from_name;
-            const isGroup = msg.to_peer.startsWith("group-");
 
             const existing = prev.find((item) =>
-              isGroup ? item.group_id === msg.to_peer : item.peer_id === peerId
+              item.peer_id === peerId
             );
 
             if (existing) {
               return prev
                 .map((item) =>
-                  item.peer_id === peerId || item.group_id === msg.to_peer
+                  item.peer_id === peerId
                     ? { ...item, last_message: msg.content, last_message_time: msg.timestamp }
                     : item
                 )
@@ -127,8 +143,7 @@ export function useChat() {
                 peer_name: peerName,
                 last_message: msg.content,
                 last_message_time: msg.timestamp,
-                type: isGroup ? "group" : "private",
-                group_id: isGroup ? msg.to_peer : undefined,
+                type: "private",
               };
               return [newItem, ...prev].sort((a, b) => b.last_message_time - a.last_message_time);
             }
@@ -139,17 +154,181 @@ export function useChat() {
       const onFile = new Channel<FilePayload>();
       onFile.onmessage = (payload) => {
         console.log("Received file:", payload);
-        alert(`收到文件: ${payload.filename}\n已保存到下载文件夹`);
+        setMessages(prev => prev.map(msg =>
+          msg.file_id === payload.file_id && msg.from_peer === payload.from
+            ? { ...msg, file_status: "completed" }
+            : msg
+        ));
       };
 
-      const peerId = await invoke<string>("start_node", { name: name.trim(), onMessage, onFile });
+      const onGroupEvent = new Channel<GroupEventPayload>();
+      onGroupEvent.onmessage = (payload) => {
+        switch (payload.kind) {
+          case "chat": {
+            const newMessage: GroupMessageRecord = {
+              id: Date.now().toString(),
+              group_id: payload.group_id,
+              from_peer: payload.from_peer,
+              from_name: payload.from_name,
+              content: payload.content,
+              timestamp: payload.timestamp,
+            };
+            setGroupMessages((prev) => [...prev, newMessage]);
+            setChatHistory((prev) => {
+              const existing = prev.find(
+                (item) => item.type === "group" && item.group_id === payload.group_id
+              );
+              if (existing) {
+                return prev
+                  .map((item) =>
+                    item.type === "group" && item.group_id === payload.group_id
+                      ? { ...item, last_message: payload.content, last_message_time: payload.timestamp }
+                      : item
+                  )
+                  .sort((a, b) => b.last_message_time - a.last_message_time);
+              }
+              const newItem: ChatHistoryItem = {
+                peer_id: payload.group_id,
+                peer_name: payload.group_name,
+                last_message: payload.content,
+                last_message_time: payload.timestamp,
+                type: "group",
+                group_id: payload.group_id,
+              };
+              return [newItem, ...prev].sort((a, b) => b.last_message_time - a.last_message_time);
+            });
+            break;
+          }
+          case "join": {
+            setGroupMembers((prev) => {
+              const members = prev[payload.group_id] || [];
+              const member: GroupMember = {
+                group_id: payload.group_id,
+                peer_id: payload.peer_id,
+                peer_name: payload.peer_name,
+                joined_at: payload.joined_at,
+              };
+              return {
+                ...prev,
+                [payload.group_id]: [
+                  ...members.filter((item) => item.peer_id !== payload.peer_id),
+                  member,
+                ],
+              };
+            });
+            loadGroupMembers(payload.group_id);
+            break;
+          }
+          case "leave": {
+            setGroupMembers((prev) => {
+              const members = prev[payload.group_id] || [];
+              return {
+                ...prev,
+                [payload.group_id]: members.filter(m => m.peer_id !== payload.peer_id),
+              };
+            });
+            break;
+          }
+          case "dissolve": {
+            setGroups((prev) => prev.filter((g) => g.id !== payload.group_id));
+            setGroupMembers((prev) => {
+              const next = { ...prev };
+              delete next[payload.group_id];
+              return next;
+            });
+            setChatHistory((prev) =>
+              prev.filter((item) => !(item.type === "group" && item.group_id === payload.group_id))
+            );
+            setSelectedGroup((current) => {
+              if (current === payload.group_id) {
+                setChatMode("global");
+                return null;
+              }
+              return current;
+            });
+            break;
+          }
+          case "sync": {
+            setGroups((prev) => {
+              const existing = prev.find((g) => g.id === payload.group_id);
+              const groupInfo: GroupInfo = {
+                id: payload.group_id,
+                name: payload.group_name,
+                passcode: payload.passcode,
+                creator_peer: payload.creator_peer,
+                member_count: payload.members.length,
+              };
+              if (existing) {
+                return prev.map((g) => g.id === payload.group_id ? groupInfo : g);
+              }
+              return [groupInfo, ...prev];
+            });
+            const convertedMembers: GroupMember[] = payload.members.map((m) => ({
+              group_id: payload.group_id,
+              peer_id: m.peer_id,
+              peer_name: m.peer_name,
+              joined_at: m.joined_at,
+            }));
+            setGroupMembers((prev) => ({
+              ...prev,
+              [payload.group_id]: convertedMembers,
+            }));
+            break;
+          }
+        }
+      };
+
+      const onFileTransfer = new Channel<FileTransferEvent>();
+      onFileTransfer.onmessage = (event) => {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.file_id !== event.file_id) return msg;
+            switch (event.kind) {
+              case "progress":
+                return {
+                  ...msg,
+                  file_status: event.status,
+                  file_progress: event.total_size === 0 ? 0 : event.received_size / event.total_size,
+                  received_size: event.received_size,
+                  file_size: event.total_size,
+                  transfer_speed: event.speed,
+                  error_message: undefined,
+                };
+              case "completed":
+                return {
+                  ...msg,
+                  file_status: "completed",
+                  file_progress: 1,
+                  received_size: msg.file_size || msg.received_size,
+                  transfer_speed: 0,
+                  file_path: event.file_path,
+                };
+              case "failed":
+                return {
+                  ...msg,
+                  file_status: "failed",
+                  transfer_speed: 0,
+                  error_message: event.error_message,
+                };
+              case "cancelled":
+                return {
+                  ...msg,
+                  file_status: "cancelled",
+                  transfer_speed: 0,
+                };
+            }
+          })
+        );
+      };
+
+      const peerId = await invoke<string>("start_node", { name: trimmedName, onMessage, onFile, onGroupEvent, onFileTransfer });
       setMyPeerId(peerId);
       myPeerIdRef.current = peerId;
       setStarted(true);
     } catch (e) {
       console.error("Failed to start node:", e);
     }
-  }, [name]);
+  }, [loadGroupMembers]);
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || !selectedPeer) return;
@@ -279,12 +458,13 @@ export function useChat() {
     try {
       const group = await invoke<GroupInfo>("create_group", { name: newGroupName.trim() });
       setGroups((prev) => [group, ...prev]);
+      await loadGroupMembers(group.id);
       return group;
     } catch (e) {
       console.error("Failed to create group:", e);
       return null;
     }
-  }, []);
+  }, [loadGroupMembers]);
 
   const handleJoinGroup = useCallback(async (passcode: string) => {
     if (!passcode.trim() || passcode.length !== 4) return null;
@@ -297,12 +477,13 @@ export function useChat() {
       });
       setSelectedGroup(group.id);
       setChatMode("group");
+      await loadGroupMembers(group.id);
       return group;
     } catch (e) {
       console.error("Failed to join group:", e);
       return null;
     }
-  }, []);
+  }, [loadGroupMembers]);
 
   const handleDissolveGroup = useCallback(async () => {
     if (!selectedGroup) return;
@@ -349,19 +530,23 @@ export function useChat() {
         const filePath = typeof file === "string" ? file : (file as { path: string }).path;
         try {
           const result = await invoke<string>("send_file", { peerId: selectedPeer, filePath });
-          const fileName = filePath.split("/").pop() || filePath;
+          const stat = await invoke<{ size: number; name: string }>("get_file_stat", { filePath });
+          const fileName = stat.name || filePath.split("/").pop() || filePath;
           const fileMsg: MessageRecord = {
             id: Date.now().toString(),
             from_peer: myPeerId,
             from_name: name,
             to_peer: selectedPeer,
-            content: `[FILE]${result}|${fileName}|0`,
+            content: `[FILE]${result}|${fileName}|${stat.size}`,
             timestamp: Math.floor(Date.now() / 1000),
             is_read: true,
             file_id: result,
             file_name: fileName,
-            file_size: 0,
+            file_size: stat.size,
             file_status: "pending",
+            file_progress: 0,
+            received_size: 0,
+            transfer_speed: 0,
           };
           setMessages((prev) => [...prev, fileMsg]);
         } catch (e) {
@@ -379,10 +564,32 @@ export function useChat() {
     try {
       await invoke("accept_file", { fileId, fromPeer });
       setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, file_status: "transferring" } : m))
+        prev.map((m) => (m.id === messageId ? { ...m, file_status: "transferring", error_message: undefined } : m))
       );
     } catch (e) {
       console.error("Failed to accept file:", e);
+    }
+  }, []);
+
+  const handleCancelFileTransfer = useCallback(async (fileId: string) => {
+    try {
+      await invoke("cancel_file_transfer", { fileId });
+      setMessages((prev) =>
+        prev.map((m) => (m.file_id === fileId ? { ...m, file_status: "cancelled", transfer_speed: 0 } : m))
+      );
+    } catch (e) {
+      console.error("Failed to cancel file transfer:", e);
+    }
+  }, []);
+
+  const handleRetryFileTransfer = useCallback(async (fileId: string) => {
+    try {
+      await invoke("retry_file_transfer", { fileId });
+      setMessages((prev) =>
+        prev.map((m) => (m.file_id === fileId ? { ...m, file_status: "transferring", error_message: undefined } : m))
+      );
+    } catch (e) {
+      console.error("Failed to retry file transfer:", e);
     }
   }, []);
 
@@ -449,6 +656,12 @@ export function useChat() {
     if (selectedGroup && chatMode === "group") loadGroupMessages(selectedGroup);
   }, [selectedGroup, chatMode, loadGroupMessages]);
 
+  useEffect(() => {
+    if (selectedGroup && chatMode === "group") {
+      loadGroupMembers(selectedGroup);
+    }
+  }, [selectedGroup, chatMode, loadGroupMembers]);
+
   return {
     name, setName,
     started,
@@ -460,6 +673,8 @@ export function useChat() {
     groups,
     selectedGroup, setSelectedGroup,
     groupMessages,
+    groupMembers,
+    loadGroupMembers,
     globalMessages,
     chatMode, setChatMode,
     chatHistory,
@@ -476,5 +691,7 @@ export function useChat() {
     handleUpdateName,
     handleFileSelect,
     handleAcceptFile,
+    handleCancelFileTransfer,
+    handleRetryFileTransfer,
   };
 }

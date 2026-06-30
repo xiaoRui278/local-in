@@ -1,23 +1,28 @@
-import type { Peer, ChatMode } from "../types";
+import type { Peer, ChatMode, GroupMember } from "../types";
 import { UsersIcon, ChevronLeftIcon, ChatIcon } from "./Icons";
 
 interface MembersPanelProps {
   show: boolean;
   chatMode: ChatMode;
   peers: Peer[];
+  selectedGroup: string | null;
+  groupMembers: Record<string, GroupMember[]>;
   onToggle: () => void;
   onSelectPeer: (peerId: string) => void;
   getAvatarColor: (name: string) => string;
 }
 
 export function MembersPanel({
-  show, chatMode, peers, onToggle, onSelectPeer, getAvatarColor,
+  show, chatMode, peers, selectedGroup, groupMembers, onToggle, onSelectPeer, getAvatarColor,
 }: MembersPanelProps) {
+  const currentGroupMembers = selectedGroup ? (groupMembers[selectedGroup] || []) : [];
+
   if (!show) {
+    const count = chatMode === "group" && selectedGroup ? currentGroupMembers.length : peers.length;
     return (
       <div className="members-sidebar-collapsed" onClick={onToggle} role="button" tabIndex={0} aria-label="展开成员列表">
         <UsersIcon width={16} height={16} />
-        <span>{peers.length}</span>
+        <span>{count}</span>
       </div>
     );
   }
@@ -32,9 +37,31 @@ export function MembersPanel({
       </div>
       <div className="members-list">
         {chatMode === "group" ? (
-          <div className="empty-state">
-            <p>群成员列表</p>
-          </div>
+          currentGroupMembers.length === 0 ? (
+            <div className="empty-state">
+              <p>暂无成员</p>
+            </div>
+          ) : (
+            currentGroupMembers.map((member) => {
+              const displayName = member.peer_name || member.peer_id.slice(0, 8);
+              const firstChar = displayName[0];
+              return (
+                <div
+                  key={member.peer_id}
+                  className="member-item"
+                  role="row"
+                >
+                  <div className="avatar-sm" style={{ background: getAvatarColor(displayName) }} aria-hidden="true">
+                    {firstChar}
+                  </div>
+                  <div className="member-info">
+                    <span className="member-name">{displayName}</span>
+                    <span className="member-status">群成员</span>
+                  </div>
+                </div>
+              );
+            })
+          )
         ) : (
           peers.map((peer) => (
             <div
