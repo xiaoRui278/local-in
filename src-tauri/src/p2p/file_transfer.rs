@@ -224,6 +224,8 @@ pub fn calculate_speed(bytes_delta: u64, elapsed_seconds: u64) -> u64 {
     bytes_delta / elapsed_seconds
 }
 
+/// Independent full-file SHA256, used as a test oracle for `hash_file_range`.
+#[cfg(test)]
 pub async fn sha256_file(path: &std::path::Path) -> io::Result<String> {
     let mut file = File::open(path).await?;
     let mut hasher = Sha256::new();
@@ -236,6 +238,27 @@ pub async fn sha256_file(path: &std::path::Path) -> io::Result<String> {
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// Reads `[0, len)` bytes from `path`, feeding them into a fresh SHA256 hasher,
+/// and returns the (unfinalized) hasher so the caller can continue updating it.
+/// Passing `u64::MAX` hashes the entire file. Used to seed the incremental
+/// hash when resuming a transfer from an offset.
+pub async fn hash_file_range(path: &std::path::Path, len: u64) -> io::Result<Sha256> {
+    let mut file = File::open(path).await?;
+    let mut hasher = Sha256::new();
+    let mut remaining = len;
+    let mut buffer = vec![0; DEFAULT_CHUNK_SIZE as usize];
+    while remaining > 0 {
+        let want = remaining.min(buffer.len() as u64) as usize;
+        let read = file.read(&mut buffer[..want]).await?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        remaining -= read as u64;
+    }
+    Ok(hasher)
 }
 
 pub fn validate_data_offset(actual: u64, expected: u64) -> io::Result<()> {
@@ -264,6 +287,10 @@ pub async fn send_file_stream(
     let mut source = File::open(&file.path).await?;
     source.seek(SeekFrom::Start(file.resume_offset)).await?;
 
+    // Seed the incremental hash with the bytes already sent (0 when not resuming),
+    // so the trailing hash covers the whole file regardless of resume offset.
+    let mut hasher = hash_file_range(&file.path, file.resume_offset).await?;
+
     let mut offset = file.resume_offset;
     let mut buffer = vec![0; DEFAULT_CHUNK_SIZE as usize];
     let started = Instant::now();
@@ -290,6 +317,7 @@ pub async fn send_file_stream(
             break;
         }
 
+        hasher.update(&buffer[..read]);
         let payload = encode_data_payload(offset, &buffer[..read]);
         write_frame(&mut stream, FrameType::Data, &payload).await?;
         offset += read as u64;
@@ -320,7 +348,7 @@ pub async fn send_file_stream(
 
     let complete = TransferComplete {
         file_id: file.file_id.clone(),
-        sha256: file.sha256.clone(),
+        sha256: hex::encode(hasher.finalize()),
     };
     write_frame(&mut stream, FrameType::Complete, &encode_json_payload(&complete)?).await?;
     stream.close().await?;
@@ -366,6 +394,10 @@ pub async fn receive_file_stream(
     output.set_len(init.resume_offset).await?;
     output.seek(SeekFrom::Start(init.resume_offset)).await?;
 
+    // Seed the incremental hash with the bytes already on disk (0 when not
+    // resuming), so verification covers the whole file at completion.
+    let mut hasher = hash_file_range(&temp_path, init.resume_offset).await?;
+
     let mut expected_offset = init.resume_offset;
     let mut last_event_at = Instant::now();
     let mut last_event_bytes = expected_offset;
@@ -377,6 +409,7 @@ pub async fn receive_file_stream(
                 let data = decode_data_payload(&frame.payload)?;
                 validate_data_offset(data.offset, expected_offset)?;
                 output.write_all(&data.bytes).await?;
+                hasher.update(&data.bytes);
                 expected_offset += data.bytes.len() as u64;
 
                 if expected_offset.saturating_sub(last_event_bytes) >= ACK_BYTES_INTERVAL
@@ -408,8 +441,9 @@ pub async fn receive_file_stream(
             FrameType::Complete => {
                 output.flush().await?;
                 drop(output);
-                let local_hash = sha256_file(&temp_path).await?;
-                if local_hash != init.sha256 {
+                let complete: TransferComplete = decode_json_payload(&frame.payload)?;
+                let local_hash = hex::encode(hasher.finalize());
+                if local_hash != complete.sha256 {
                     let message = "Received file hash did not match sender hash".to_string();
                     let _ = events
                         .send(FileTransferEvent::Failed {
@@ -504,5 +538,28 @@ mod tests {
     fn data_offset_must_match_expected_offset() {
         assert!(validate_data_offset(1024, 1024).is_ok());
         assert!(validate_data_offset(2048, 1024).is_err());
+    }
+
+    #[tokio::test]
+    async fn hash_file_range_over_full_length_matches_sha256_file() {
+        let path = std::env::temp_dir().join(format!(
+            "localin-hashrange-{}.bin",
+            uuid::Uuid::new_v4()
+        ));
+        let data: Vec<u8> = (0..100_000u32).map(|i| (i % 251) as u8).collect();
+        tokio::fs::write(&path, &data).await.unwrap();
+
+        let full = sha256_file(&path).await.unwrap();
+
+        // Seeding over the full length then finalizing equals the full-file hash.
+        let hasher = hash_file_range(&path, data.len() as u64).await.unwrap();
+        assert_eq!(hex::encode(hasher.finalize()), full);
+
+        // Seeding a prefix then continuing with the remaining bytes equals the full-file hash.
+        let mut partial = hash_file_range(&path, 40_000).await.unwrap();
+        partial.update(&data[40_000..]);
+        assert_eq!(hex::encode(partial.finalize()), full);
+
+        tokio::fs::remove_file(&path).await.ok();
     }
 }

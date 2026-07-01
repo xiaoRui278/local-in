@@ -92,6 +92,11 @@ pub enum GroupNetworkEvent {
         creator_peer: String,
         members: Vec<GroupSyncMember>,
     },
+    JoinRequest {
+        passcode: String,
+        peer_id: String,
+        peer_name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -123,6 +128,10 @@ pub enum ChatRequest {
         file_id: String,
         from: String,
     },
+    FileCancel {
+        file_id: String,
+        from: String,
+    },
     GroupEvent {
         topic: String,
         group_id: String,
@@ -137,6 +146,11 @@ pub enum ChatRequest {
         name: String,
         creator_peer: String,
         members: Vec<GroupSyncMember>,
+    },
+    GroupJoinRequest {
+        passcode: String,
+        peer_id: String,
+        peer_name: String,
     },
 }
 
@@ -251,6 +265,12 @@ enum SwarmCommand {
     },
     CancelFileTransfer {
         file_id: String,
+        to_peer: Option<String>,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    RejectFile {
+        file_id: String,
+        from_peer: String,
         resp: oneshot::Sender<Result<(), String>>,
     },
     RetryFileTransfer {
@@ -291,6 +311,12 @@ enum SwarmCommand {
         name: String,
         creator_peer: String,
         members: Vec<GroupSyncMember>,
+        resp: oneshot::Sender<Result<(), String>>,
+    },
+    RequestJoinGroup {
+        passcode: String,
+        peer_id: String,
+        peer_name: String,
         resp: oneshot::Sender<Result<(), String>>,
     },
     BroadcastPeerInfo {
@@ -338,6 +364,41 @@ pub struct P2PNode {
     received_file_rx: Option<mpsc::Receiver<FileReceived>>,
     received_group_rx: Option<mpsc::Receiver<GroupNetworkEvent>>,
     received_file_transfer_rx: Option<mpsc::Receiver<FileTransferEvent>>,
+}
+
+/// Cloneable command-only handle to the running swarm, safe to move into
+/// spawned tasks that need to send commands (e.g. responding to join requests).
+#[derive(Clone)]
+pub struct P2PHandle {
+    cmd_tx: mpsc::Sender<SwarmCommand>,
+}
+
+impl P2PHandle {
+    pub async fn broadcast_group_info(
+        &self,
+        passcode: &str,
+        group_id: &str,
+        name: &str,
+        creator_peer: &str,
+        members: Vec<GroupSyncMember>,
+    ) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::BroadcastGroupInfo {
+                passcode: passcode.to_string(),
+                group_id: group_id.to_string(),
+                name: name.to_string(),
+                creator_peer: creator_peer.to_string(),
+                members,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
 }
 
 impl P2PNode {
@@ -648,6 +709,22 @@ impl P2PNode {
                                         }
                                         ChatRequest::FileReject { file_id, from: _ } => {
                                             tracing::info!("File rejected: {}", file_id);
+                                            outgoing_files.remove(&file_id);
+                                            cancel_txs.remove(&file_id);
+                                            let _ = file_transfer_tx
+                                                .send(FileTransferEvent::Cancelled { file_id })
+                                                .await;
+                                        }
+                                        ChatRequest::FileCancel { file_id, from: _ } => {
+                                            tracing::info!("File cancelled by peer: {}", file_id);
+                                            incoming_files.remove(&file_id);
+                                            outgoing_files.remove(&file_id);
+                                            if let Some(cancel_tx) = cancel_txs.remove(&file_id) {
+                                                let _ = cancel_tx.send(true);
+                                            }
+                                            let _ = file_transfer_tx
+                                                .send(FileTransferEvent::Cancelled { file_id })
+                                                .await;
                                         }
                                         ChatRequest::GroupEvent { topic, group_id, passcode, group_name, creator_peer, message } => {
                                             if subscribed_topics.contains(&topic) {
@@ -665,15 +742,31 @@ impl P2PNode {
                                             }
                                         }
                                         ChatRequest::GroupInfoSync { passcode, group_id, name, creator_peer, members } => {
-                                            let event = GroupNetworkEvent::Sync {
-                                                passcode,
-                                                group_id,
-                                                name,
-                                                creator_peer,
-                                                members,
-                                            };
-                                            if let Err(e) = received_group_tx.try_send(event) {
-                                                tracing::error!("Failed to forward group sync: {}", e);
+                                            let topic = format!("local-in-group-{}", passcode);
+                                            if subscribed_topics.contains(&topic) {
+                                                let event = GroupNetworkEvent::Sync {
+                                                    passcode,
+                                                    group_id,
+                                                    name,
+                                                    creator_peer,
+                                                    members,
+                                                };
+                                                if let Err(e) = received_group_tx.try_send(event) {
+                                                    tracing::error!("Failed to forward group sync: {}", e);
+                                                }
+                                            }
+                                        }
+                                        ChatRequest::GroupJoinRequest { passcode, peer_id, peer_name } => {
+                                            let topic = format!("local-in-group-{}", passcode);
+                                            if subscribed_topics.contains(&topic) {
+                                                let event = GroupNetworkEvent::JoinRequest {
+                                                    passcode,
+                                                    peer_id,
+                                                    peer_name,
+                                                };
+                                                if let Err(e) = received_group_tx.try_send(event) {
+                                                    tracing::error!("Failed to forward group join request: {}", e);
+                                                }
                                             }
                                         }
                                     }
@@ -820,11 +913,42 @@ impl P2PNode {
                                 let _ = resp.send(Err("Peer not found".to_string()));
                             }
                         }
-                        Some(SwarmCommand::CancelFileTransfer { file_id, resp }) => {
+                        Some(SwarmCommand::CancelFileTransfer { file_id, to_peer, resp }) => {
                             if let Some(cancel_tx) = cancel_txs.remove(&file_id) {
                                 let _ = cancel_tx.send(true);
                             }
+                            outgoing_files.remove(&file_id);
+                            incoming_files.remove(&file_id);
+                            if let Some(peer) = to_peer {
+                                if let Some(target_peer_id) = connected_peers.get(&peer) {
+                                    let request = ChatRequest::FileCancel {
+                                        file_id,
+                                        from: local_peer_id.clone(),
+                                    };
+                                    let peer_id_copy = *target_peer_id;
+                                    swarm
+                                        .behaviour_mut()
+                                        .request_response
+                                        .send_request(&peer_id_copy, request);
+                                }
+                            }
                             let _ = resp.send(Ok(()));
+                        }
+                        Some(SwarmCommand::RejectFile { file_id, from_peer, resp }) => {
+                            if let Some(target_peer_id) = connected_peers.get(&from_peer) {
+                                let request = ChatRequest::FileReject {
+                                    file_id,
+                                    from: local_peer_id.clone(),
+                                };
+                                let peer_id_copy = *target_peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request);
+                                let _ = resp.send(Ok(()));
+                            } else {
+                                let _ = resp.send(Err("Peer not found".to_string()));
+                            }
                         }
                         Some(SwarmCommand::RetryFileTransfer { target, resp }) => {
                             if let Some(target_peer_id) = connected_peers.get(&target.from_peer) {
@@ -894,6 +1018,21 @@ impl P2PNode {
                             }
                             let _ = resp.send(Ok(()));
                         }
+                        Some(SwarmCommand::RequestJoinGroup { passcode, peer_id, peer_name, resp }) => {
+                            let request = ChatRequest::GroupJoinRequest {
+                                passcode,
+                                peer_id,
+                                peer_name,
+                            };
+                            for (_peer_str, target_peer_id) in connected_peers.iter() {
+                                let peer_id_copy = *target_peer_id;
+                                swarm
+                                    .behaviour_mut()
+                                    .request_response
+                                    .send_request(&peer_id_copy, request.clone());
+                            }
+                            let _ = resp.send(Ok(()));
+                        }
                         Some(SwarmCommand::UpdateName { new_name, resp }) => {
                             name = new_name;
                             let local_info = PeerInfo {
@@ -925,6 +1064,12 @@ impl P2PNode {
 
     pub fn peer_id(&self) -> String {
         self.peer_id.clone()
+    }
+
+    pub fn handle(&self) -> P2PHandle {
+        P2PHandle {
+            cmd_tx: self.cmd_tx.clone(),
+        }
     }
 
     pub fn take_message_receiver(&mut self) -> Option<mpsc::Receiver<ChatMessage>> {
@@ -1056,11 +1201,28 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn cancel_file_transfer(&self, file_id: &str) -> Result<(), String> {
+    pub async fn cancel_file_transfer(&self, file_id: &str, to_peer: Option<String>) -> Result<(), String> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.cmd_tx
             .send(SwarmCommand::CancelFileTransfer {
                 file_id: file_id.to_string(),
+                to_peer,
+                resp: resp_tx,
+            })
+            .await
+            .map_err(|_| "Failed to send command".to_string())?;
+
+        resp_rx
+            .await
+            .map_err(|_| "Failed to get response".to_string())?
+    }
+
+    pub async fn reject_file(&self, file_id: &str, from_peer: &str) -> Result<(), String> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(SwarmCommand::RejectFile {
+                file_id: file_id.to_string(),
+                from_peer: from_peer.to_string(),
                 resp: resp_tx,
             })
             .await
@@ -1160,22 +1322,18 @@ impl P2PNode {
             .map_err(|_| "Failed to get response".to_string())?
     }
 
-    pub async fn broadcast_group_info(
+    pub async fn request_join_group(
         &self,
         passcode: &str,
-        group_id: &str,
-        name: &str,
-        creator_peer: &str,
-        members: Vec<GroupSyncMember>,
+        peer_id: &str,
+        peer_name: &str,
     ) -> Result<(), String> {
         let (resp_tx, resp_rx) = oneshot::channel();
         self.cmd_tx
-            .send(SwarmCommand::BroadcastGroupInfo {
+            .send(SwarmCommand::RequestJoinGroup {
                 passcode: passcode.to_string(),
-                group_id: group_id.to_string(),
-                name: name.to_string(),
-                creator_peer: creator_peer.to_string(),
-                members,
+                peer_id: peer_id.to_string(),
+                peer_name: peer_name.to_string(),
                 resp: resp_tx,
             })
             .await

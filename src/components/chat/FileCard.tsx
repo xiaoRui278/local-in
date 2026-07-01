@@ -5,6 +5,7 @@ interface FileCardProps {
   message: MessageRecord;
   isMine: boolean;
   onAccept: (fileId: string, fromPeer: string, messageId: string) => void;
+  onReject: (fileId: string, fromPeer: string, messageId: string) => void;
   onCancel: (fileId: string) => void;
   onRetry: (fileId: string) => void;
 }
@@ -33,7 +34,7 @@ function statusLabel(status: MessageRecord["file_status"]) {
   }
 }
 
-export function FileCard({ message, isMine, onAccept, onCancel, onRetry }: FileCardProps) {
+export function FileCard({ message, isMine, onAccept, onReject, onCancel, onRetry }: FileCardProps) {
   const progress = Math.max(0, Math.min(1, message.file_progress || 0));
   const isActive = message.file_status === "transferring" || message.file_status === "hashing";
   const canRetry = !isMine && (message.file_status === "failed" || message.file_status === "cancelled");
@@ -71,6 +72,24 @@ export function FileCard({ message, isMine, onAccept, onCancel, onRetry }: FileC
             aria-label={`接收文件 ${message.file_name}`}
           >
             接收
+          </button>
+        )}
+        {message.file_status === "pending" && !isMine && (
+          <button
+            className="file-secondary-btn"
+            onClick={() => onReject(message.file_id!, message.from_peer, message.id)}
+            aria-label={`拒绝文件 ${message.file_name}`}
+          >
+            拒绝
+          </button>
+        )}
+        {message.file_status === "pending" && isMine && message.file_id && (
+          <button
+            className="file-secondary-btn"
+            onClick={() => onCancel(message.file_id!)}
+            aria-label={`撤回文件 ${message.file_name}`}
+          >
+            撤回
           </button>
         )}
         {isActive && message.file_id && (

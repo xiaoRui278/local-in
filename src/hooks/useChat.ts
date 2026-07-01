@@ -553,29 +553,43 @@ export function useChat() {
       const file = await open({ multiple: false });
       if (file) {
         const filePath = typeof file === "string" ? file : (file as { path: string }).path;
+        const fileId = crypto.randomUUID();
         try {
-          const result = await invoke<string>("send_file", { peerId: selectedPeer, filePath });
           const stat = await invoke<{ size: number; name: string }>("get_file_stat", { filePath });
           const fileName = stat.name || filePath.split("/").pop() || filePath;
+          const targetPeer = selectedPeer;
           const fileMsg: MessageRecord = {
             id: Date.now().toString(),
             from_peer: myPeerId,
             from_name: name,
-            to_peer: selectedPeer,
-            content: `[FILE]${result}|${fileName}|${stat.size}`,
+            to_peer: targetPeer,
+            content: `[FILE]${fileId}|${fileName}|${stat.size}`,
             timestamp: Math.floor(Date.now() / 1000),
             is_read: true,
-            file_id: result,
+            file_id: fileId,
             file_name: fileName,
             file_size: stat.size,
-            file_status: "pending",
+            file_status: "hashing",
             file_progress: 0,
             received_size: 0,
             transfer_speed: 0,
           };
           setMessages((prev) => [...prev, fileMsg]);
+          try {
+            await invoke<string>("send_file", { peerId: targetPeer, filePath, fileId });
+            setMessages((prev) =>
+              prev.map((m) => (m.file_id === fileId ? { ...m, file_status: "pending" } : m))
+            );
+          } catch (e) {
+            console.error("Failed to send file:", e);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.file_id === fileId ? { ...m, file_status: "failed", error_message: String(e) } : m
+              )
+            );
+          }
         } catch (e) {
-          console.error("Failed to send file:", e);
+          console.error("Failed to stat file:", e);
           alert("发送失败: " + e);
         }
       }
@@ -593,6 +607,19 @@ export function useChat() {
       );
     } catch (e) {
       console.error("Failed to accept file:", e);
+    }
+  }, []);
+
+  const handleRejectFile = useCallback(async (fileId: string, fromPeer: string, messageId: string) => {
+    try {
+      await invoke("reject_file", { fileId, fromPeer });
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, file_status: "cancelled", error_message: "已拒绝接收" } : m
+        )
+      );
+    } catch (e) {
+      console.error("Failed to reject file:", e);
     }
   }, []);
 
@@ -724,6 +751,7 @@ export function useChat() {
     handleUpdateName,
     handleFileSelect,
     handleAcceptFile,
+    handleRejectFile,
     handleCancelFileTransfer,
     handleRetryFileTransfer,
     handleClearPrivateChats,

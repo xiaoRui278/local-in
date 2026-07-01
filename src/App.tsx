@@ -152,6 +152,7 @@ function App() {
         onDissolveGroup={chat.handleDissolveGroup}
         onLeaveGroup={chat.handleLeaveGroup}
         onAcceptFile={chat.handleAcceptFile}
+        onRejectFile={chat.handleRejectFile}
         onCancelFileTransfer={chat.handleCancelFileTransfer}
         onRetryFileTransfer={chat.handleRetryFileTransfer}
         formatTime={formatTime}
