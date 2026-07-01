@@ -3,7 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+fn parse_file_id(content: &str) -> Option<&str> {
+    let payload = content.strip_prefix("[FILE]")?;
+    payload.split('|').next()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct MessageRecord {
     pub id: String,
     pub from_peer: String,
@@ -12,6 +17,49 @@ pub struct MessageRecord {
     pub content: String,
     pub timestamp: i64,
     pub is_read: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_size: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub received_size: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+}
+
+impl MessageRecord {
+    pub fn without_file_metadata(
+        id: String,
+        from_peer: String,
+        from_name: String,
+        to_peer: String,
+        content: String,
+        timestamp: i64,
+        is_read: bool,
+    ) -> Self {
+        Self {
+            id,
+            from_peer,
+            from_name,
+            to_peer,
+            content,
+            timestamp,
+            is_read,
+            file_id: None,
+            file_name: None,
+            file_size: None,
+            file_status: None,
+            received_size: None,
+            error_message: None,
+            file_path: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -178,75 +226,109 @@ impl Database {
     }
 
     pub fn get_all_non_global_messages(&self) -> Result<Vec<MessageRecord>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read
-             FROM messages
-             WHERE to_peer != 'global' AND to_peer != ''
-             ORDER BY timestamp DESC",
-        )?;
+        let mut messages = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read
+                 FROM messages
+                 WHERE to_peer != 'global' AND to_peer != ''
+                 ORDER BY timestamp DESC",
+            )?;
 
-        let messages = stmt
-            .query_map([], |row| {
-                Ok(MessageRecord {
-                    id: row.get(0)?,
-                    from_peer: row.get(1)?,
-                    from_name: row.get(2)?,
-                    to_peer: row.get(3)?,
-                    content: row.get(4)?,
-                    timestamp: row.get(5)?,
-                    is_read: row.get(6)?,
-                })
+            let messages = stmt.query_map([], |row| {
+                Ok(MessageRecord::without_file_metadata(
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
             })?
             .collect::<Result<Vec<_>>>()?;
+            messages
+        };
 
+        self.attach_file_metadata(&mut messages)?;
         Ok(messages)
     }
 
     pub fn get_messages(&self, peer_id: &str, limit: i64) -> Result<Vec<MessageRecord>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer != 'global') OR (to_peer = ?1 AND from_peer != 'global') ORDER BY timestamp DESC LIMIT ?2"
-        )?;
+        let mut messages = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer != 'global') OR (to_peer = ?1 AND from_peer != 'global') ORDER BY timestamp DESC LIMIT ?2"
+            )?;
 
-        let messages = stmt
-            .query_map((peer_id, limit), |row| {
-                Ok(MessageRecord {
-                    id: row.get(0)?,
-                    from_peer: row.get(1)?,
-                    from_name: row.get(2)?,
-                    to_peer: row.get(3)?,
-                    content: row.get(4)?,
-                    timestamp: row.get(5)?,
-                    is_read: row.get(6)?,
-                })
+            let messages = stmt.query_map((peer_id, limit), |row| {
+                Ok(MessageRecord::without_file_metadata(
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
             })?
             .collect::<Result<Vec<_>>>()?;
+            messages
+        };
 
+        self.attach_file_metadata(&mut messages)?;
         Ok(messages)
     }
 
     pub fn get_dm_messages(&self, peer1: &str, peer2: &str, limit: i64) -> Result<Vec<MessageRecord>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer = ?2) OR (from_peer = ?2 AND to_peer = ?1) ORDER BY timestamp DESC LIMIT ?3"
-        )?;
+        let mut messages = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT id, from_peer, from_name, to_peer, content, timestamp, is_read FROM messages WHERE (from_peer = ?1 AND to_peer = ?2) OR (from_peer = ?2 AND to_peer = ?1) ORDER BY timestamp DESC LIMIT ?3"
+            )?;
 
-        let messages = stmt
-            .query_map((peer1, peer2, limit), |row| {
-                Ok(MessageRecord {
-                    id: row.get(0)?,
-                    from_peer: row.get(1)?,
-                    from_name: row.get(2)?,
-                    to_peer: row.get(3)?,
-                    content: row.get(4)?,
-                    timestamp: row.get(5)?,
-                    is_read: row.get(6)?,
-                })
+            let messages = stmt.query_map((peer1, peer2, limit), |row| {
+                Ok(MessageRecord::without_file_metadata(
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
             })?
             .collect::<Result<Vec<_>>>()?;
+            messages
+        };
 
+        self.attach_file_metadata(&mut messages)?;
         Ok(messages)
+    }
+
+    fn attach_file_metadata(&self, messages: &mut [MessageRecord]) -> Result<()> {
+        for message in messages {
+            let Some(file_id) = parse_file_id(&message.content) else {
+                continue;
+            };
+            let Some(file) = self.get_file_record(file_id)? else {
+                continue;
+            };
+            message.file_id = Some(file.id);
+            message.file_name = Some(file.filename);
+            message.file_size = Some(file.file_size);
+            message.file_status = Some(file.status);
+            message.received_size = Some(file.received_bytes);
+            message.error_message = file.error_message;
+            message.file_path = file.local_path;
+        }
+        Ok(())
+    }
+
+    pub fn clear_private_messages(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM messages WHERE to_peer != 'global' AND to_peer != ''", [])?;
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -642,5 +724,86 @@ impl Database {
         conn.execute("DELETE FROM group_members WHERE group_id = ?1", [group_id])?;
         conn.execute("DELETE FROM groups WHERE id = ?1", [group_id])?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn in_memory_db() -> Database {
+        let db = Database {
+            conn: Mutex::new(Connection::open_in_memory().unwrap()),
+        };
+        db.init_tables().unwrap();
+        db
+    }
+
+    #[test]
+    fn dm_messages_include_file_transfer_status() {
+        let db = in_memory_db();
+        db.save_message(&MessageRecord::without_file_metadata(
+            "message-1".to_string(),
+            "peer-a".to_string(),
+            "对方".to_string(),
+            "me".to_string(),
+            "[FILE]file-1|a.zip|1024|hash".to_string(),
+            1,
+            false,
+        ))
+        .unwrap();
+        db.save_file_record(&FileRecord {
+            id: "file-1".to_string(),
+            from_peer: "peer-a".to_string(),
+            to_peer: "me".to_string(),
+            filename: "a.zip".to_string(),
+            file_size: 1024,
+            status: "completed".to_string(),
+            timestamp: 1,
+            local_path: Some("/Downloads/a.zip".to_string()),
+            temp_path: None,
+            total_bytes: 1024,
+            received_bytes: 1024,
+            sha256: Some("hash".to_string()),
+            error_message: None,
+            updated_at: 2,
+        })
+        .unwrap();
+
+        let messages = db.get_dm_messages("me", "peer-a", 10).unwrap();
+
+        assert_eq!(messages[0].file_status.as_deref(), Some("completed"));
+        assert_eq!(messages[0].received_size, Some(1024));
+        assert_eq!(messages[0].file_path.as_deref(), Some("/Downloads/a.zip"));
+    }
+
+    #[test]
+    fn clear_private_messages_removes_private_messages_only() {
+        let db = in_memory_db();
+        db.save_message(&MessageRecord::without_file_metadata(
+            "private-1".to_string(),
+            "me".to_string(),
+            "我".to_string(),
+            "peer-a".to_string(),
+            "私聊".to_string(),
+            1,
+            true,
+        ))
+        .unwrap();
+        db.save_message(&MessageRecord::without_file_metadata(
+            "global-1".to_string(),
+            "me".to_string(),
+            "我".to_string(),
+            "global".to_string(),
+            "公共频道".to_string(),
+            2,
+            true,
+        ))
+        .unwrap();
+
+        db.clear_private_messages().unwrap();
+
+        assert!(db.get_all_non_global_messages().unwrap().is_empty());
+        assert_eq!(db.get_messages("global", 10).unwrap().len(), 1);
     }
 }

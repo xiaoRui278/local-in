@@ -264,15 +264,15 @@ async fn start_node(
                         msg.to_peer
                     };
                     tracing::info!("Message to_peer: {}, content: {}", to_peer, msg.content);
-                    let record = MessageRecord {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        from_peer: msg.from.clone(),
-                        from_name: msg.from_name.clone(),
-                        to_peer: to_peer.clone(),
-                        content: msg.content.clone(),
-                        timestamp: msg.timestamp as i64,
-                        is_read: false,
-                    };
+                    let record = MessageRecord::without_file_metadata(
+                        uuid::Uuid::new_v4().to_string(),
+                        msg.from.clone(),
+                        msg.from_name.clone(),
+                        to_peer.clone(),
+                        msg.content.clone(),
+                        msg.timestamp as i64,
+                        false,
+                    );
                     match db.save_message(&record) {
                         Ok(_) => {
                             tracing::info!("Message saved to DB, sending via channel...");
@@ -619,15 +619,15 @@ async fn send_message(
         node.send_message(&to, &content).await?;
 
         let from_name = state.db.get_user_config("name").map_err(|e| e.to_string())?.unwrap_or_else(|| "Anonymous".to_string());
-        let msg = MessageRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            from_peer: from,
+        let msg = MessageRecord::without_file_metadata(
+            uuid::Uuid::new_v4().to_string(),
+            from,
             from_name,
-            to_peer: to,
+            to,
             content,
-            timestamp: chrono::Utc::now().timestamp(),
-            is_read: true,
-        };
+            chrono::Utc::now().timestamp(),
+            true,
+        );
         state.db.save_message(&msg).map_err(|e| e.to_string())?;
 
         Ok(())
@@ -647,15 +647,15 @@ async fn send_global_message(
         node.send_message("", &content).await?;
 
         let from_name = state.db.get_user_config("name").map_err(|e| e.to_string())?.unwrap_or_else(|| "Anonymous".to_string());
-        let msg = MessageRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            from_peer: from,
+        let msg = MessageRecord::without_file_metadata(
+            uuid::Uuid::new_v4().to_string(),
+            from,
             from_name,
-            to_peer: "global".to_string(),
+            "global".to_string(),
             content,
-            timestamp: chrono::Utc::now().timestamp(),
-            is_read: true,
-        };
+            chrono::Utc::now().timestamp(),
+            true,
+        );
         state.db.save_message(&msg).map_err(|e| e.to_string())?;
 
         Ok(())
@@ -752,6 +752,11 @@ async fn get_chat_history(state: tauri::State<'_, AppState>) -> Result<Vec<ChatH
     history.append(&mut group_history);
     history.sort_by(|a, b| b.last_message_time.cmp(&a.last_message_time));
     Ok(history)
+}
+
+#[tauri::command]
+async fn clear_private_messages(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.db.clear_private_messages().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1226,6 +1231,7 @@ fn main() {
             get_messages,
             get_dm_messages,
             get_chat_history,
+            clear_private_messages,
             get_saved_name,
             send_file,
             cancel_file_transfer,
@@ -1284,24 +1290,24 @@ mod tests {
     #[test]
     fn chat_history_uses_latest_message_per_private_peer() {
         let messages = vec![
-            MessageRecord {
-                id: "1".to_string(),
-                from_peer: "me".to_string(),
-                from_name: "我".to_string(),
-                to_peer: "peer-a".to_string(),
-                content: "旧消息".to_string(),
-                timestamp: 10,
-                is_read: true,
-            },
-            MessageRecord {
-                id: "2".to_string(),
-                from_peer: "peer-a".to_string(),
-                from_name: "对方".to_string(),
-                to_peer: "me".to_string(),
-                content: "新消息".to_string(),
-                timestamp: 20,
-                is_read: false,
-            },
+            MessageRecord::without_file_metadata(
+                "1".to_string(),
+                "me".to_string(),
+                "我".to_string(),
+                "peer-a".to_string(),
+                "旧消息".to_string(),
+                10,
+                true,
+            ),
+            MessageRecord::without_file_metadata(
+                "2".to_string(),
+                "peer-a".to_string(),
+                "对方".to_string(),
+                "me".to_string(),
+                "新消息".to_string(),
+                20,
+                false,
+            ),
         ];
 
         let history = build_private_chat_history("me", messages);

@@ -60,6 +60,9 @@ export function FileCard({ message, isMine, onAccept, onCancel, onRetry }: FileC
             </div>
           )}
           {message.error_message && <div className="file-error">{message.error_message}</div>}
+          {message.file_status === "completed" && message.file_path && (
+            <div className="file-path" title={message.file_path}>保存到：{message.file_path}</div>
+          )}
         </div>
         {message.file_status === "pending" && !isMine && (
           <button

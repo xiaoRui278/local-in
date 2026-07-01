@@ -2,6 +2,25 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { Peer, MessageRecord, GroupInfo, GroupMessageRecord, ChatHistoryItem, ChatHistoryRecord, MessagePayload, FilePayload, GroupMember, GroupEventPayload, FileTransferEvent } from "../types";
 
+function hydrateFileMessage(message: MessageRecord): MessageRecord {
+  if (!message.content.startsWith("[FILE]")) return message;
+
+  const parts = message.content.substring(6).split("|");
+  if (parts.length < 3) return message;
+
+  const fileSize = parseInt(parts[2], 10) || 0;
+  return {
+    ...message,
+    file_id: parts[0],
+    file_name: parts[1],
+    file_size: fileSize,
+    file_status: message.file_status || "pending",
+    file_progress: message.file_progress || 0,
+    received_size: message.received_size || 0,
+    transfer_speed: message.transfer_speed || 0,
+  };
+}
+
 export function useChat() {
   const [name, setName] = useState("");
   const [started, setStarted] = useState(false);
@@ -38,7 +57,7 @@ export function useChat() {
         peer2: peerId,
         limit: 100,
       });
-      setMessages(msgs.reverse());
+      setMessages(msgs.reverse().map(hydrateFileMessage));
     } catch (e) {
       console.error("Failed to load messages:", e);
     }
@@ -111,20 +130,8 @@ export function useChat() {
         const msg = payload.record;
 
         if (msg.content.startsWith("[FILE]")) {
-          const parts = msg.content.substring(6).split("|");
-          if (parts.length >= 3) {
-            const fileSize = parseInt(parts[2], 10) || 0;
-            const fileMsg: MessageRecord = {
-              ...msg,
-              content: msg.content,
-              file_id: parts[0],
-              file_name: parts[1],
-              file_size: fileSize,
-              file_status: "pending",
-              file_progress: 0,
-              received_size: 0,
-              transfer_speed: 0,
-            };
+          const fileMsg = hydrateFileMessage(msg);
+          if (fileMsg.file_id) {
             if (msg.to_peer === myPeerIdRef.current) {
               setMessages((prev) => [...prev, fileMsg]);
             }
@@ -174,7 +181,7 @@ export function useChat() {
         console.log("Received file:", payload);
         setMessages(prev => prev.map(msg =>
           msg.file_id === payload.file_id && msg.from_peer === payload.from
-            ? { ...msg, file_status: "completed" }
+            ? { ...msg, file_status: "completed", file_progress: 1, received_size: msg.file_size, file_path: payload.file_path }
             : msg
         ));
       };
@@ -611,6 +618,13 @@ export function useChat() {
     }
   }, []);
 
+  const handleClearPrivateChats = useCallback(async () => {
+    await invoke("clear_private_messages");
+    setChatHistory((prev) => prev.filter((item) => item.type !== "private"));
+    setMessages([]);
+    setSelectedPeer(null);
+  }, []);
+
   useEffect(() => { loadSavedConfig(); }, [loadSavedConfig]);
 
   useEffect(() => {
@@ -712,5 +726,6 @@ export function useChat() {
     handleAcceptFile,
     handleCancelFileTransfer,
     handleRetryFileTransfer,
+    handleClearPrivateChats,
   };
 }

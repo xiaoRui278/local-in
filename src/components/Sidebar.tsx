@@ -16,6 +16,7 @@ interface SidebarProps {
   onSelectGroup: (groupId: string) => void;
   onCreateGroup: () => void;
   onJoinGroup: () => void;
+  onClearPrivateChats: () => void;
 }
 
 function getAvatarColor(name: string) {
@@ -45,8 +46,16 @@ function formatLastMessage(message: string) {
 export function Sidebar({
   theme, name, peers, chatHistory, chatMode, selectedPeer, selectedGroup,
   onToggleTheme, onOpenSettings, onSelectGlobal, onSelectPrivate, onSelectGroup,
-  onCreateGroup, onJoinGroup,
+  onCreateGroup, onJoinGroup, onClearPrivateChats,
 }: SidebarProps) {
+  const hasPrivateChats = chatHistory.some((item) => item.type === "private");
+
+  const handleClearPrivateChats = () => {
+    if (window.confirm("确定清空所有私聊记录吗？此操作只影响本机历史记录。")) {
+      onClearPrivateChats();
+    }
+  };
+
   return (
     <nav className="sidebar" aria-label="聊天列表">
       <div className="sidebar-header">
@@ -89,7 +98,14 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="section-label" role="heading" aria-level={2}>我的聊天</div>
+      <div className="section-label" role="heading" aria-level={2}>
+        <span>我的聊天</span>
+        {hasPrivateChats && (
+          <button className="text-btn" onClick={handleClearPrivateChats} aria-label="清空私聊记录">
+            清空
+          </button>
+        )}
+      </div>
       <div className="chat-list" role="list">
         {chatHistory.length === 0 ? (
           <div className="empty-state" style={{ padding: "var(--space-3)" }}>
