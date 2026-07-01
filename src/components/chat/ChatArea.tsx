@@ -111,6 +111,7 @@ export function ChatArea({
   }
 
   if (selectedPeer) {
+    const isPeerOnline = peers.some((p) => p.peer_id === selectedPeer && p.online);
     return (
       <div className="chat-area">
         <ChatHeader
@@ -133,6 +134,7 @@ export function ChatArea({
           onSend={onSend}
           onFileSelect={onFileSelect}
           showFileButton={true}
+          disabled={!isPeerOnline}
         />
       </div>
     );

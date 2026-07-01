@@ -127,6 +127,7 @@ function App() {
         onCreateGroup={() => setShowCreateGroup(true)}
         onJoinGroup={() => setShowJoinGroup(true)}
         onClearPrivateChats={chat.handleClearPrivateChats}
+        onDeletePrivateChat={chat.handleDeletePrivateChat}
       />
 
       <ChatArea

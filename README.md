@@ -6,6 +6,11 @@
   <img src="https://img.shields.io/badge/Tauri-2.0-orange?logo=tauri" alt="Tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?logo=rust" alt="Rust">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/Vibe%20Coding-🌊-ff69b4" alt="Vibe Coding">
+</p>
+
+<p align="center">
+  <em>🌊 本项目采用 Vibe Coding 方式开发 — 人与 AI 结对协作完成。</em>
 </p>
 
 <p align="center">

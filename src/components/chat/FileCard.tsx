@@ -29,6 +29,8 @@ function statusLabel(status: MessageRecord["file_status"]) {
       return "传输失败";
     case "cancelled":
       return "已取消";
+    case "rejected":
+      return "已拒绝";
     default:
       return "待接收";
   }

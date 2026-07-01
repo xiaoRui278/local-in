@@ -815,6 +815,11 @@ async fn clear_private_messages(state: tauri::State<'_, AppState>) -> Result<(),
 }
 
 #[tauri::command]
+async fn delete_private_chat(state: tauri::State<'_, AppState>, peer_id: String) -> Result<(), String> {
+    state.db.delete_private_messages_by_peer(&peer_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_saved_name(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
     state
         .db
@@ -1318,6 +1323,7 @@ fn main() {
             get_dm_messages,
             get_chat_history,
             clear_private_messages,
+            delete_private_chat,
             get_saved_name,
             send_file,
             cancel_file_transfer,

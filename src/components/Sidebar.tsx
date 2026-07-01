@@ -1,5 +1,6 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Peer, ChatHistoryItem, ChatMode, Theme } from "../types";
-import { SettingsIcon, SunIcon, MoonIcon, BellIcon } from "./Icons";
+import { SettingsIcon, SunIcon, MoonIcon, BellIcon, CloseIcon } from "./Icons";
 
 interface SidebarProps {
   theme: Theme;
@@ -17,6 +18,7 @@ interface SidebarProps {
   onCreateGroup: () => void;
   onJoinGroup: () => void;
   onClearPrivateChats: () => void;
+  onDeletePrivateChat: (peerId: string) => void;
 }
 
 function getAvatarColor(name: string) {
@@ -46,13 +48,20 @@ function formatLastMessage(message: string) {
 export function Sidebar({
   theme, name, peers, chatHistory, chatMode, selectedPeer, selectedGroup,
   onToggleTheme, onOpenSettings, onSelectGlobal, onSelectPrivate, onSelectGroup,
-  onCreateGroup, onJoinGroup, onClearPrivateChats,
+  onCreateGroup, onJoinGroup, onClearPrivateChats, onDeletePrivateChat,
 }: SidebarProps) {
   const hasPrivateChats = chatHistory.some((item) => item.type === "private");
 
   const handleClearPrivateChats = () => {
     if (window.confirm("确定清空所有私聊记录吗？此操作只影响本机历史记录。")) {
       onClearPrivateChats();
+    }
+  };
+
+  const handleDeletePrivateChat = (e: ReactMouseEvent, peerId: string, peerName: string) => {
+    e.stopPropagation();
+    if (window.confirm(`确定删除与 ${peerName} 的聊天记录吗？此操作只影响本机。`)) {
+      onDeletePrivateChat(peerId);
     }
   };
 
@@ -147,6 +156,15 @@ export function Sidebar({
                     {item.type === "group" ? `${item.member_count} 人` : formatLastMessage(item.last_message)}
                   </span>
                 </div>
+                {item.type === "private" && (
+                  <button
+                    className="icon-btn chat-delete-btn"
+                    onClick={(e) => handleDeletePrivateChat(e, item.peer_id, item.peer_name)}
+                    aria-label={`删除与 ${item.peer_name} 的聊天`}
+                  >
+                    <CloseIcon width={14} height={14} />
+                  </button>
+                )}
               </div>
             );
           })

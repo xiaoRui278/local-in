@@ -331,6 +331,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_private_messages_by_peer(&self, peer_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM messages WHERE (from_peer = ?1 AND to_peer != 'global') OR (to_peer = ?1 AND from_peer != 'global')",
+            [peer_id],
+        )?;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn save_file_record(&self, record: &FileRecord) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -804,6 +813,63 @@ mod tests {
         db.clear_private_messages().unwrap();
 
         assert!(db.get_all_non_global_messages().unwrap().is_empty());
+        assert_eq!(db.get_messages("global", 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn delete_private_messages_by_peer_removes_only_that_conversation() {
+        let db = in_memory_db();
+        // Conversation with peer-a (both directions)
+        db.save_message(&MessageRecord::without_file_metadata(
+            "a-out".to_string(),
+            "me".to_string(),
+            "我".to_string(),
+            "peer-a".to_string(),
+            "发给A".to_string(),
+            1,
+            true,
+        ))
+        .unwrap();
+        db.save_message(&MessageRecord::without_file_metadata(
+            "a-in".to_string(),
+            "peer-a".to_string(),
+            "A".to_string(),
+            "me".to_string(),
+            "A发来".to_string(),
+            2,
+            false,
+        ))
+        .unwrap();
+        // Conversation with peer-b
+        db.save_message(&MessageRecord::without_file_metadata(
+            "b-out".to_string(),
+            "me".to_string(),
+            "我".to_string(),
+            "peer-b".to_string(),
+            "发给B".to_string(),
+            3,
+            true,
+        ))
+        .unwrap();
+        // Global message
+        db.save_message(&MessageRecord::without_file_metadata(
+            "g-1".to_string(),
+            "me".to_string(),
+            "我".to_string(),
+            "global".to_string(),
+            "公共".to_string(),
+            4,
+            true,
+        ))
+        .unwrap();
+
+        db.delete_private_messages_by_peer("peer-a").unwrap();
+
+        // peer-a conversation gone (both directions)
+        assert!(db.get_dm_messages("me", "peer-a", 10).unwrap().is_empty());
+        // peer-b conversation intact
+        assert_eq!(db.get_dm_messages("me", "peer-b", 10).unwrap().len(), 1);
+        // global intact
         assert_eq!(db.get_messages("global", 10).unwrap().len(), 1);
     }
 }

@@ -615,7 +615,7 @@ export function useChat() {
       await invoke("reject_file", { fileId, fromPeer });
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === messageId ? { ...m, file_status: "cancelled", error_message: "已拒绝接收" } : m
+          m.id === messageId ? { ...m, file_status: "rejected", error_message: "已拒绝接收" } : m
         )
       );
     } catch (e) {
@@ -650,6 +650,22 @@ export function useChat() {
     setChatHistory((prev) => prev.filter((item) => item.type !== "private"));
     setMessages([]);
     setSelectedPeer(null);
+  }, []);
+
+  const handleDeletePrivateChat = useCallback(async (peerId: string) => {
+    try {
+      await invoke("delete_private_chat", { peerId });
+      setChatHistory((prev) => prev.filter((item) => !(item.type === "private" && item.peer_id === peerId)));
+      setSelectedPeer((prev) => {
+        if (prev === peerId) {
+          setMessages([]);
+          return null;
+        }
+        return prev;
+      });
+    } catch (e) {
+      console.error("Failed to delete private chat:", e);
+    }
   }, []);
 
   useEffect(() => { loadSavedConfig(); }, [loadSavedConfig]);
@@ -755,5 +771,6 @@ export function useChat() {
     handleCancelFileTransfer,
     handleRetryFileTransfer,
     handleClearPrivateChats,
+    handleDeletePrivateChat,
   };
 }

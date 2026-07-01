@@ -5,7 +5,7 @@ export interface Peer {
   online: boolean;
 }
 
-export type FileTransferStatus = "pending" | "hashing" | "transferring" | "completed" | "failed" | "cancelled";
+export type FileTransferStatus = "pending" | "hashing" | "transferring" | "completed" | "failed" | "cancelled" | "rejected";
 
 export interface MessageRecord {
   id: string;

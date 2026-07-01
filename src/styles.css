@@ -337,6 +337,21 @@ body {
   outline-offset: -2px;
 }
 
+.chat-delete-btn {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.peer-item:hover .chat-delete-btn,
+.chat-delete-btn:focus-visible {
+  opacity: 0.7;
+}
+
+.chat-delete-btn:hover {
+  opacity: 1 !important;
+}
+
 .avatar {
   width: 40px;
   height: 40px;
@@ -515,6 +530,13 @@ body {
   gap: var(--space-3);
   align-items: center;
   background: var(--color-surface-secondary);
+}
+
+.input-counter {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  opacity: 0.7;
 }
 
 .input-area input {
