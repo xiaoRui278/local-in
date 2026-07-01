@@ -1,0 +1,128 @@
+name: Build
+
+on:
+  push:
+    branches: [master, feature/develop]
+    tags: ['v*']
+  pull_request:
+    branches: [master, feature/develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: windows
+          - platform: macos-latest
+            target: macos-arm64
+          - platform: macos-latest
+            target: macos-x64
+            args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            target: linux
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" == "macos-x64" ]; then
+            rustup target add x86_64-apple-darwin
+          fi
+          pnpm tauri build ${{ matrix.args }}
+
+      - name: Upload Windows artifacts
+        if: matrix.target == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-Windows
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: warn
+
+      - name: Upload macOS ARM64 artifacts
+        if: matrix.target == 'macos-arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-macOS-ARM64
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: warn
+
+      - name: Upload macOS x64 artifacts
+        if: matrix.target == 'macos-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-macOS-x64
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/
+          if-no-files-found: warn
+
+      - name: Upload Linux artifacts
+        if: matrix.target == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-In-Linux
+          path: src-tauri/target/release/bundle/
+          if-no-files-found: warn
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+          draft: true
+          prerelease: false
