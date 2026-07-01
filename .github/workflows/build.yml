@@ -107,6 +107,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master --depth=1000
+          if git merge-base --is-ancestor "${{ github.sha }}" origin/master; then
+            echo "Tag commit is on master, proceeding with release."
+          else
+            echo "::error::Tag ${{ github.ref_name }} is not on master. Release aborted."
+            exit 1
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
