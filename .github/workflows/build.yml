@@ -66,7 +66,17 @@ jobs:
           if [ "${{ matrix.target }}" == "macos-x64" ]; then
             rustup target add x86_64-apple-darwin
           fi
-          pnpm tauri build ${{ matrix.args }}
+          n=0
+          until [ "$n" -ge 3 ]; do
+            pnpm tauri build ${{ matrix.args }} && break
+            n=$((n + 1))
+            echo "::warning::tauri build attempt $n failed (likely flaky DMG bundling), retrying..."
+            sleep 5
+          done
+          if [ "$n" -ge 3 ]; then
+            echo "::error::tauri build failed after 3 attempts"
+            exit 1
+          fi
 
       - name: Upload Windows artifacts
         if: matrix.target == 'windows'
