@@ -40,6 +40,24 @@
 | Rust | 1.70 或更高 |
 | pnpm | 推荐使用最新稳定版 |
 
+### 下载安装包
+
+从 [Releases](https://github.com/xiaoRui278/local-in/releases) 页面下载对应平台的安装包。
+
+#### macOS：提示“文件已损坏，无法打开”
+
+由于应用尚未做 Apple 代码签名与公证，macOS 会为下载的应用添加隔离属性（quarantine），并可能报“已损坏”。这并非文件真的损坏。安装到「应用程序」后，在终端执行以下命令移除隔离属性即可正常打开：
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/Local-In.app
+```
+
+Intel 芯片的 Mac 也可尝试「系统设置 → 隐私与安全性 → 仍要打开」放行。
+
+#### Windows：SmartScreen 提示
+
+首次运行时若出现 SmartScreen 提示，点击「更多信息 → 仍要运行」即可。
+
 ### 从源码运行
 
 ```bash
